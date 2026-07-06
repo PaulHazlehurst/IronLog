@@ -362,7 +362,7 @@ function renderTodayTab() {
 
     const copyBtn = card.querySelector('.copy-last-btn');
     if (copyBtn) copyBtn.onclick = () => {
-      setsWrap.innerHTML = '';
+      resetSetsContainer(setsWrap, ex.unit);
       lastEntry.sets.forEach(s => addSetRow(setsWrap, s.weight, s.reps, ex.unit, s.rpe));
       toast("Filled in with last time's numbers.");
     };
@@ -403,7 +403,7 @@ function renderTodayTab() {
     $all('.card[data-exercise-id]', list).forEach(card => {
       const exId = card.dataset.exerciseId;
       const ex = exercises.find(e => e.id === exId);
-      const sets = $all('.set-row', card).map(row => ({
+      const sets = $all('.set-row:not(.set-header)', card).map(row => ({
         weight: Number(row.querySelector('.set-weight').value) || 0,
         reps: Number(row.querySelector('.set-reps').value) || 0,
         rpe: Number(row.querySelector('.set-rpe').value) || 8
@@ -466,15 +466,40 @@ function beep() {
   } catch (e) { /* audio not available, ignore */ }
 }
 
+function setsHeaderHTML(unit) {
+  return `
+    <div class="set-row set-header">
+      <div class="set-num-col"></div>
+      <div>Weight (${unit})</div>
+      <div>Reps</div>
+      <div>RPE</div>
+      <div class="set-remove-col"></div>
+    </div>`;
+}
+
+function resetSetsContainer(container, unit) {
+  container.innerHTML = setsHeaderHTML(unit);
+}
+
+function renumberSets(container) {
+  $all('.set-row:not(.set-header)', container).forEach((row, i) => {
+    row.querySelector('.set-number').textContent = i + 1;
+  });
+}
+
 function addSetRow(container, weight, reps, unit, rpe) {
+  if (!container.querySelector('.set-header')) container.innerHTML = setsHeaderHTML(unit);
   const row = document.createElement('div');
-  row.className = 'row set-row';
-  row.style.marginBottom = '6px';
+  row.className = 'set-row';
+  const setNum = $all('.set-row:not(.set-header)', container).length + 1;
   row.innerHTML = `
-    <div><input class="set-weight" type="number" value="${weight}" placeholder="Weight (${unit})"></div>
-    <div><input class="set-reps" type="number" value="${reps}" placeholder="Reps"></div>
-    <div><input class="set-rpe" type="number" value="${rpe ?? 8}" min="1" max="10" step="0.5" placeholder="RPE"></div>
+    <div class="set-number">${setNum}</div>
+    <div><input class="set-weight" type="number" value="${weight}" inputmode="decimal"></div>
+    <div><input class="set-reps" type="number" value="${reps}" inputmode="numeric"></div>
+    <div><input class="set-rpe" type="number" value="${rpe ?? 8}" min="1" max="10" step="0.5" inputmode="decimal"></div>
+    <button type="button" class="set-remove" aria-label="Remove set" title="Remove set">×</button>
   `;
+  row.querySelector('.set-remove').onclick = () => { row.remove(); renumberSets(container); };
   container.appendChild(row);
 }
 
