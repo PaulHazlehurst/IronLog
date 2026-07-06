@@ -38,7 +38,14 @@ function saveJSON(key, value) {
 
 // Anything (sync.js) can register to hear about local data changes.
 let onDataChanged = null;
-function notifyChanged() { if (typeof onDataChanged === 'function') onDataChanged(); }
+const LAST_CHANGE_KEY = 'ih_last_change';
+function notifyChanged() {
+  try { localStorage.setItem(LAST_CHANGE_KEY, new Date().toISOString()); } catch (e) { /* ignore */ }
+  if (typeof onDataChanged === 'function') onDataChanged();
+}
+function getLastLocalChangeAt() {
+  return localStorage.getItem(LAST_CHANGE_KEY);
+}
 
 const Storage = {
   getPlan() {

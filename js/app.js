@@ -731,17 +731,23 @@ function renderSettingsTab() {
     if (!token) { toast('GitHub sync disconnected.'); renderSettingsTab(); return; }
     if (hadToken) { toast('Token updated.'); return; }
     toast('Connecting to GitHub…');
-    const pullRes = await Sync.pull();
-    if (pullRes.ok) {
-      toast('Found existing data — pulled it in.');
-      renderActiveTab();
-    } else {
+    if (Sync.hasPendingLocalChanges()) {
       const pushRes = await Sync.push();
-      toast(pushRes.ok ? 'Created new sync store on GitHub.' : pushRes.message);
+      toast(pushRes.ok ? 'Pushed your existing data to GitHub as the starting point.' : pushRes.message);
+    } else {
+      const pullRes = await Sync.pull();
+      if (pullRes.ok) {
+        toast('Found existing data — pulled it in.');
+        renderActiveTab();
+      } else {
+        const pushRes = await Sync.push();
+        toast(pushRes.ok ? 'Created new sync store on GitHub.' : pushRes.message);
+      }
     }
     renderSettingsTab();
   };
   $('#pullNowBtn').onclick = async () => {
+    if (Sync.hasPendingLocalChanges() && !confirm('You have local changes not yet pushed to GitHub. Pulling now will overwrite them with the GitHub copy. Continue anyway?')) return;
     $('#syncStatus').textContent = 'Pulling…';
     const res = await Sync.pull();
     toast(res.message);
@@ -781,9 +787,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   $all('.tab-btn').forEach(b => b.onclick = () => switchTab(b.dataset.tab));
   const s = Storage.getSettings();
   if (s.githubToken) {
-    toast('Syncing with GitHub…');
-    const res = await Sync.pull();
-    if (res.ok) toast('Synced from GitHub.');
+    if (Sync.hasPendingLocalChanges()) {
+      toast('Pushing unsynced changes to GitHub…');
+      await Sync.push();
+    } else {
+      toast('Checking GitHub for updates…');
+      const res = await Sync.pull();
+      if (res.ok) toast('Synced from GitHub.');
+    }
   }
   switchTab('today');
 });

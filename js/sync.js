@@ -129,13 +129,24 @@ const Sync = {
     }
   },
 
-  // Called whenever local data changes; waits a few seconds in case more
+  // True if you've made local changes since the last successful push —
+  // pulling now would silently overwrite them, so callers should push
+  // (or at least warn) instead of pulling blind.
+  hasPendingLocalChanges() {
+    const s = Storage.getSettings();
+    const lastChange = getLastLocalChangeAt();
+    if (!lastChange) return false;
+    if (!s.githubLastSync) return true;
+    return new Date(lastChange) > new Date(s.githubLastSync);
+  },
+
+  // Called whenever local data changes; waits a couple seconds in case more
   // changes are coming (e.g. adding several sets), then pushes once.
   scheduleAutoPush() {
     const s = Storage.getSettings();
     if (!s.githubToken) return;
     clearTimeout(Sync.pushTimer);
-    Sync.pushTimer = setTimeout(() => { Sync.push(); }, 4000);
+    Sync.pushTimer = setTimeout(() => { Sync.push(); }, 2000);
   }
 };
 
