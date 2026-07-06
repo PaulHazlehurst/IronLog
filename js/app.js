@@ -92,6 +92,14 @@ function renderPlanTab() {
   const plan = Storage.getPlan();
   const panel = $('#panel-plan');
   panel.innerHTML = `
+    <div class="card">
+      <div class="row" style="justify-content:space-between;">
+        <h3>Plan review</h3>
+        <button class="btn btn-primary btn-sm" id="reviewPlanBtn">Review my week</button>
+      </div>
+      <p class="helper-text">Checks your whole week for volume outside typical ranges, back-to-back scheduling conflicts, missing muscle groups, rep-range variety, and repeated exercises.</p>
+      <div id="planReviewResults"></div>
+    </div>
     <div class="day-tabs" id="planDayTabs"></div>
     <div class="card">
       <div class="row" style="justify-content:space-between;">
@@ -103,6 +111,8 @@ function renderPlanTab() {
     </div>
     <div id="addExerciseForm"></div>
   `;
+  $('#reviewPlanBtn').onclick = () => runPlanReview(plan);
+
   const dayTabs = $('#planDayTabs');
   DAYS.forEach(d => {
     const b = document.createElement('button');
@@ -169,6 +179,18 @@ function renderPlanTab() {
   }
 
   $('#addExerciseBtn').onclick = () => renderAddExerciseForm();
+}
+
+function runPlanReview(plan) {
+  const resultsEl = $('#planReviewResults');
+  const findings = PlanReview.analyze(plan);
+  resultsEl.innerHTML = PlanReview.renderHTML(findings) + `<div class="ai-review-slot"></div>`;
+  const aiSlot = resultsEl.querySelector('.ai-review-slot');
+  aiSlot.innerHTML = `<div class="helper-text">Loading AI summary…</div>`;
+  const summary = PlanReview.toPromptSummary(plan, findings);
+  AI.reviewPlan(summary).then(res => {
+    aiSlot.innerHTML = `<div class="ai-tip"><span class="tag">${res.source === 'ai' ? 'AI summary' : 'Note'}</span>${res.text}</div>`;
+  });
 }
 
 function renderAddExerciseForm(existing) {

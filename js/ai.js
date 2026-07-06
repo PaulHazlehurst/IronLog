@@ -63,6 +63,20 @@ const AI = {
     }
   },
 
+  async reviewPlan(planSummary) {
+    if (!AI.isConfigured()) {
+      return { text: 'Turn on AI in Settings and add a free Gemini key for a written, prioritized summary on top of the checks above.', source: 'offline' };
+    }
+    try {
+      const prompt = `You are an experienced, practical strength coach. Here is a lifter's weekly training plan and a list of automatically-detected flags:\n\n${planSummary}\n\nGive 3-5 concise, prioritized, practical suggestions for set/rep changes or restructuring, focused on the most important issues first. Plain language, no fluff, no disclaimers, under 150 words total.`;
+      const text = await AI.callGemini(prompt);
+      return { text, source: 'ai' };
+    } catch (e) {
+      console.error(e);
+      return { text: 'AI review failed — the checks above still stand on their own.', source: 'offline' };
+    }
+  },
+
   async suggestExercise(muscle, equipment, avoid) {
     const fallbackMap = {
       Chest: 'Incline dumbbell press', Back: 'Chest-supported row', Shoulders: 'Seated dumbbell lateral raise',
