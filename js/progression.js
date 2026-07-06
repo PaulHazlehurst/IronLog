@@ -14,6 +14,37 @@
 
 const Progression = {
 
+  // Epley formula — a common, simple way to estimate a 1-rep max from a
+  // higher-rep set. Rough by nature; treat it as a trend line, not a fact.
+  estimateOneRM(weight, reps) {
+    if (!weight || !reps) return 0;
+    if (reps === 1) return weight;
+    return Math.round(weight * (1 + reps / 30));
+  },
+
+  // Best top-set weight logged in an entry (used for trend charts / PRs).
+  topSetOf(entry) {
+    if (!entry?.sets?.length) return { weight: 0, reps: 0, oneRm: 0 };
+    const best = entry.sets.reduce((a, s) => (s.weight > a.weight ? s : a), entry.sets[0]);
+    return { weight: best.weight, reps: best.reps, oneRm: Progression.estimateOneRM(best.weight, best.reps) };
+  },
+
+  // Looks at the last 3 sessions for an exercise: if estimated 1RM hasn't
+  // meaningfully improved and effort (RPE) hasn't dropped, that's a plateau.
+  detectPlateau(recentLogEntries) {
+    if (!recentLogEntries || recentLogEntries.length < 3) return null;
+    const last3 = recentLogEntries.slice(-3);
+    const oneRms = last3.map(e => Progression.topSetOf(e).oneRm);
+    const improving = oneRms[2] > oneRms[0] * 1.01; // >1% up over 3 sessions
+    const avgRpeLast = last3[2].sets?.length
+      ? last3[2].sets.reduce((a, s) => a + (Number(s.rpe) || 8), 0) / last3[2].sets.length
+      : 8;
+    if (!improving && avgRpeLast >= 8) {
+      return 'No real progress across your last 3 sessions here despite solid effort — a classic plateau. Consider an extra deload, swapping the exercise for a few weeks, or double-checking recovery/nutrition around this lift.';
+    }
+    return null;
+  },
+
   // How much weight to add when an exercise "levels up", by category.
   incrementFor(exercise) {
     if (exercise.type === 'isolation') return exercise.unit === 'kg' ? 1.25 : 2.5;
@@ -107,6 +138,8 @@ const Progression = {
       };
     }
 
+    // (warm-up ramp is generated separately — see Progression.warmupRamp below)
+
     // Still building reps within the range — same weight, chase 1-2 more reps.
     return {
       weight: last.sets[0].weight,
@@ -114,5 +147,29 @@ const Progression = {
       sets: exercise.sets,
       note: 'Same weight — add a rep or two per set before the next jump in load.'
     };
+  },
+
+  // A standard percentage-based warm-up ramp for compound lifts, so you're
+  // not jumping straight from empty bar to working weight.
+  warmupRamp(workingWeight, unit, increment) {
+    if (!workingWeight) return [];
+    const round = (w) => Math.round(w / increment) * increment;
+    const steps = [
+      { pct: 0.4, reps: 8 },
+      { pct: 0.6, reps: 5 },
+      { pct: 0.8, reps: 3 }
+    ];
+    return steps
+      .map(s => ({ weight: round(workingWeight * s.pct), reps: s.reps }))
+      .filter(s => s.weight > 0 && s.weight < workingWeight);
+  },
+
+  // Suggested rest, in seconds, based on the rep range — heavier/lower-rep
+  // work needs more recovery between sets than higher-rep hypertrophy work.
+  suggestedRestSeconds(repLow, exerciseType) {
+    if (repLow <= 5) return exerciseType === 'compound' ? 210 : 150;
+    if (repLow <= 8) return 120;
+    if (repLow <= 12) return 90;
+    return 60;
   }
 };

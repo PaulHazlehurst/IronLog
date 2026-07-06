@@ -32,6 +32,36 @@ const TIER_COLORS = {
   Intermediate: '#3E8FB0', Advanced: '#C9A15A', Elite: '#7FD8D0'
 };
 
+// Weekly working-set landmarks per muscle group, in the spirit of the
+// widely-discussed MEV/MAV/MRV framework (minimum effective, maximum
+// adaptive, maximum recoverable volume) — approximate general ranges, not
+// individualized prescriptions.
+const VOLUME_LANDMARKS = {
+  Chest: { mev: 8, mav: 16, mrv: 22 }, Back: { mev: 10, mav: 18, mrv: 25 },
+  Shoulders: { mev: 8, mav: 16, mrv: 24 }, Biceps: { mev: 6, mav: 14, mrv: 20 },
+  Triceps: { mev: 6, mav: 14, mrv: 20 }, Quads: { mev: 8, mav: 16, mrv: 22 },
+  Hamstrings: { mev: 6, mav: 12, mrv: 18 }, Glutes: { mev: 6, mav: 12, mrv: 18 },
+  Calves: { mev: 6, mav: 14, mrv: 20 }, Abs: { mev: 0, mav: 12, mrv: 20 }
+};
+
+const Volume = {
+  weeklySetsByMuscle(plan) {
+    const totals = Object.fromEntries(MUSCLES.map(m => [m, 0]));
+    Object.values(plan.days).forEach(dayExercises => {
+      (dayExercises || []).forEach(ex => { totals[ex.muscle] = (totals[ex.muscle] || 0) + Number(ex.sets || 0); });
+    });
+    return totals;
+  },
+  classify(muscle, sets) {
+    const lm = VOLUME_LANDMARKS[muscle];
+    if (!lm) return { label: 'Unknown', color: 'var(--text-dim)' };
+    if (sets < lm.mev) return { label: 'Below minimum', color: 'var(--accent)' };
+    if (sets <= lm.mav) return { label: 'In range', color: 'var(--success)' };
+    if (sets <= lm.mrv) return { label: 'High but tolerable', color: 'var(--amber)' };
+    return { label: 'Likely excessive', color: 'var(--accent)' };
+  }
+};
+
 const Standards = {
   tierFor(lift, gender, bodyweightLb, liftedLb) {
     const table = STANDARDS[gender]?.[lift];

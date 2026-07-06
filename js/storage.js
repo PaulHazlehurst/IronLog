@@ -51,14 +51,19 @@ const Storage = {
   },
 
   getSettings() {
-    return loadJSON(DB.SETTINGS, {
+    const defaults = {
       units: 'lb',
       bodyweight: 180,
       gender: 'male',
       aiProvider: 'gemini',
       aiApiKey: '',
-      aiEnabled: false
-    });
+      aiEnabled: false,
+      barWeight: 45,
+      availablePlates: [45, 35, 25, 10, 5, 2.5],
+      restTimerSound: true,
+      manualLifts: {}
+    };
+    return { ...defaults, ...loadJSON(DB.SETTINGS, {}) };
   },
   saveSettings(s) { saveJSON(DB.SETTINGS, s); },
 
@@ -138,3 +143,38 @@ function weekdayName(dateStr) {
   const idx = (d.getDay() + 6) % 7; // Monday=0
   return DAYS[idx];
 }
+
+/* ---------------- CONSISTENCY / STREAK HELPERS ---------------- */
+const Consistency = {
+  // Distinct session dates, sorted ascending.
+  sessionDates(logs) {
+    return [...new Set(logs.map(l => l.date))].sort();
+  },
+
+  // Consecutive weeks (Mon-Sun) with at least one logged session, counting back from today.
+  currentStreakWeeks(logs) {
+    const dates = new Set(Consistency.sessionDates(logs));
+    let weeks = new Set([...dates].map(d => mondayOf(d)));
+    let streak = 0;
+    let cursor = mondayOf(isoDate());
+    while (weeks.has(cursor)) {
+      streak++;
+      const d = new Date(cursor + 'T00:00:00');
+      d.setDate(d.getDate() - 7);
+      cursor = isoDate(d);
+    }
+    return streak;
+  },
+
+  totalSessions(logs) { return Consistency.sessionDates(logs).length; },
+
+  // Sessions logged in the last 7 days vs. sessions scheduled in the plan (rough adherence %).
+  adherenceLast7Days(logs, plan) {
+    const scheduled = Object.values(plan.days).filter(arr => arr && arr.length > 0).length;
+    if (scheduled === 0) return null;
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 7);
+    const recent = Consistency.sessionDates(logs).filter(d => new Date(d + 'T00:00:00') >= cutoff).length;
+    return Math.min(100, Math.round((recent / scheduled) * 100));
+  }
+};
