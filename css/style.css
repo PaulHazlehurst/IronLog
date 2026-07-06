@@ -1,0 +1,311 @@
+/* ============================================================
+   TOKENS
+   ============================================================ */
+:root {
+  --bg: #14161A;
+  --surface: #1D2024;
+  --surface-2: #262A30;
+  --border: #33383F;
+  --text: #ECEAE4;
+  --text-dim: #9BA1A8;
+  --accent: #E2453B;
+  --accent-ink: #ffffff;
+  --blue: #3E8FB0;
+  --amber: #E8A33D;
+  --success: #4CAF6D;
+  --radius: 10px;
+  --font-display: 'Oswald', sans-serif;
+  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+* { box-sizing: border-box; }
+html { -webkit-tap-highlight-color: transparent; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  line-height: 1.5;
+  padding-bottom: 76px; /* room for mobile bottom nav */
+}
+
+h1, h2, h3, .display {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  margin: 0;
+}
+
+a { color: var(--blue); }
+
+button, input, select, textarea {
+  font-family: var(--font-body);
+  color: var(--text);
+}
+
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+
+/* ============================================================
+   HEADER
+   ============================================================ */
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  background: var(--bg);
+  z-index: 10;
+}
+
+.app-header h1 {
+  font-size: 22px;
+  letter-spacing: 0.06em;
+}
+.app-header h1 span { color: var(--accent); }
+
+.week-dial {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.week-dial .ring {
+  width: 40px; height: 40px;
+}
+.week-dial .label {
+  font-family: var(--font-display);
+  font-size: 12px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  line-height: 1.2;
+}
+.week-dial .label strong {
+  display: block;
+  color: var(--text);
+  font-size: 14px;
+}
+
+/* ============================================================
+   TABS
+   ============================================================ */
+.tab-nav {
+  display: flex;
+  gap: 4px;
+  padding: 10px 16px 0;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+}
+.tab-btn {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-family: var(--font-display);
+  font-size: 13px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 10px 14px;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.tab-btn.active { color: var(--text); border-bottom-color: var(--accent); }
+
+.tab-panel { display: none; padding: 20px; max-width: 900px; margin: 0 auto; }
+.tab-panel.active { display: block; }
+
+/* Mobile bottom nav */
+@media (max-width: 720px) {
+  .tab-nav {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    border-bottom: none;
+    justify-content: space-around;
+    padding: 6px 4px;
+    z-index: 20;
+  }
+  .tab-btn { padding: 8px 6px; font-size: 11px; flex: 1; text-align: center; }
+  .tab-panel { padding: 16px; }
+}
+
+/* ============================================================
+   COMMON COMPONENTS
+   ============================================================ */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 14px;
+}
+
+.card h3 { font-size: 15px; color: var(--text-dim); margin-bottom: 10px; }
+
+.btn {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 13px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  padding: 10px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.btn:hover { border-color: var(--text-dim); }
+.btn-primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn-primary:hover { filter: brightness(1.08); }
+.btn-sm { padding: 6px 10px; font-size: 11px; }
+.btn-danger { border-color: var(--accent); color: var(--accent); background: transparent; }
+
+.row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.row > * { flex: 1; min-width: 100px; }
+
+label { display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.04em; }
+
+input, select, textarea {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 9px 10px;
+  font-size: 14px;
+  width: 100%;
+}
+
+.pill {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.day-tabs { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; margin-bottom: 14px; }
+.day-tabs button {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-family: var(--font-display);
+  font-size: 12px;
+  text-transform: uppercase;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.day-tabs button.active { color: var(--text); border-color: var(--accent); background: var(--surface); }
+
+.exercise-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  gap: 10px;
+}
+.exercise-row:last-child { border-bottom: none; }
+.exercise-name { font-weight: 600; }
+.exercise-meta { font-size: 12px; color: var(--text-dim); }
+
+.rx-box {
+  background: var(--surface-2);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-top: 6px;
+  font-size: 13px;
+  border-left: 3px solid var(--accent);
+}
+.rx-box.deload { border-left-color: var(--amber); }
+.rx-box.peak { border-left-color: var(--blue); }
+
+.empty-state {
+  text-align: center;
+  color: var(--text-dim);
+  padding: 40px 16px;
+  font-size: 14px;
+}
+
+/* ============================================================
+   RECOVERY MAP
+   ============================================================ */
+.recovery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 12px;
+}
+.muscle-tile {
+  background: var(--surface-2);
+  border-radius: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+}
+.muscle-tile .name { font-family: var(--font-display); font-size: 13px; text-transform: uppercase; margin-bottom: 6px; }
+.muscle-bar-track { height: 8px; background: var(--surface); border-radius: 999px; overflow: hidden; }
+.muscle-bar-fill { height: 100%; border-radius: 999px; transition: width 0.4s ease; }
+.muscle-tile .status { font-size: 11px; color: var(--text-dim); margin-top: 6px; }
+
+/* ============================================================
+   STATS / TIERS
+   ============================================================ */
+.tier-card { display: flex; align-items: center; gap: 14px; }
+.tier-badge {
+  width: 56px; height: 56px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-display);
+  font-size: 11px;
+  text-align: center;
+  flex-shrink: 0;
+  color: var(--bg);
+  font-weight: 700;
+}
+.tier-info { flex: 1; }
+.tier-info .lift-name { font-family: var(--font-display); text-transform: uppercase; font-size: 15px; }
+.tier-info .tier-name { font-size: 20px; font-family: var(--font-display); }
+.tier-info .to-next { font-size: 12px; color: var(--text-dim); }
+
+/* ============================================================
+   AI PANEL
+   ============================================================ */
+.ai-tip {
+  background: var(--surface-2);
+  border-left: 3px solid var(--blue);
+  border-radius: 8px;
+  padding: 12px;
+  font-size: 13.5px;
+  margin-top: 10px;
+}
+.ai-tip .tag { font-size: 10px; text-transform: uppercase; color: var(--text-dim); letter-spacing: 0.05em; display: block; margin-bottom: 4px; }
+
+.toast {
+  position: fixed;
+  bottom: 90px; left: 50%;
+  transform: translateX(-50%);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  padding: 10px 18px;
+  border-radius: 999px;
+  font-size: 13px;
+  z-index: 50;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+}
+.toast.show { opacity: 1; }
+
+@media (max-width: 720px) {
+  .toast { bottom: 78px; }
+}
+
+.helper-text { font-size: 12px; color: var(--text-dim); margin-top: 6px; }
