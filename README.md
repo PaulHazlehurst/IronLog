@@ -36,6 +36,26 @@ Use **Settings → Export backup** regularly (a `.json` file downloads to your
 device) and **Import backup** to restore or move it to another
 browser/device.
 
+## Cross-device sync (GitHub Gist)
+
+Settings has a "Cross-device sync" card. Create a GitHub personal access
+token with only the **gist** scope (a link in Settings takes you straight
+to the right token-creation page), paste it in, and the app will:
+
+- On the first device: create a private Gist named `iron-log-data.json`
+  holding your plan/logs/settings (never your API keys or the token itself).
+- On any other device where you paste the *same* token: automatically find
+  that Gist and pull its contents in.
+- After that, any change you make (adding an exercise, logging a session,
+  changing settings) automatically pushes to the Gist a few seconds later,
+  and the app pulls the latest copy each time you open it.
+
+This is last-write-wins — fine for one person using their own phone and
+computer, not designed for two people editing at the exact same moment.
+"Pull latest" and "Push now" buttons in Settings let you force a sync
+manually if you want to be sure. If your token expires or is revoked, sync
+silently stops; just generate a new one and paste it back in.
+
 ## AI assist (optional, free)
 
 The "Get form cue" button and future exercise-suggestion features call
