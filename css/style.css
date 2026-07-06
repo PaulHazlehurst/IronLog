@@ -475,3 +475,63 @@ input, select, textarea {
   flex-shrink: 0;
 }
 .exercise-picker button.active { color: var(--text); border-color: var(--accent); }
+
+/* ============================================================
+   SET TRACKING — clear per-set rows on the Today tab
+   ============================================================ */
+.sets-log {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.set-row {
+  display: grid;
+  grid-template-columns: 26px 1fr 1fr 1fr 26px;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 10px;
+}
+.set-row:not(.set-header):nth-of-type(even) { background: var(--surface-2); }
+.set-row:not(:last-child) { border-bottom: 1px solid var(--border); }
+.set-row.set-header {
+  padding: 7px 10px;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+}
+.set-row input {
+  padding: 8px 8px;
+  text-align: center;
+  font-size: 16px;
+}
+.set-number {
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.set-remove {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+}
+.set-remove:hover { color: var(--accent); background: var(--surface); }
+
+@media (max-width: 480px) {
+  .set-row { grid-template-columns: 22px 1fr 1fr 1fr 22px; gap: 5px; padding: 8px 6px; }
+  .set-number { width: 19px; height: 19px; font-size: 10px; }
+}
