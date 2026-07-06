@@ -36,14 +36,18 @@ function saveJSON(key, value) {
   }
 }
 
+// Anything (sync.js) can register to hear about local data changes.
+let onDataChanged = null;
+function notifyChanged() { if (typeof onDataChanged === 'function') onDataChanged(); }
+
 const Storage = {
   getPlan() {
     return loadJSON(DB.PLAN, { days: Object.fromEntries(DAYS.map(d => [d, []])) });
   },
-  savePlan(plan) { saveJSON(DB.PLAN, plan); },
+  savePlan(plan) { saveJSON(DB.PLAN, plan); notifyChanged(); },
 
   getLogs() { return loadJSON(DB.LOGS, []); },
-  saveLogs(logs) { saveJSON(DB.LOGS, logs); },
+  saveLogs(logs) { saveJSON(DB.LOGS, logs); notifyChanged(); },
   addLog(entry) {
     const logs = Storage.getLogs();
     logs.push(entry);
@@ -61,11 +65,17 @@ const Storage = {
       barWeight: 45,
       availablePlates: [45, 35, 25, 10, 5, 2.5],
       restTimerSound: true,
-      manualLifts: {}
+      manualLifts: {},
+      githubToken: '',
+      githubGistId: '',
+      githubLastSync: null
     };
     return { ...defaults, ...loadJSON(DB.SETTINGS, {}) };
   },
-  saveSettings(s) { saveJSON(DB.SETTINGS, s); },
+  saveSettings(s) { saveJSON(DB.SETTINGS, s); notifyChanged(); },
+  // Same as saveSettings but never triggers a sync push — used when Sync
+  // itself is writing back gistId/lastSync so it doesn't loop on itself.
+  saveSettingsSilent(s) { saveJSON(DB.SETTINGS, s); },
 
   getCycle() {
     return loadJSON(DB.CYCLE, {
@@ -74,10 +84,10 @@ const Storage = {
       peakEvery: 0      // 0 = disabled; else weeks between test/peak weeks
     });
   },
-  saveCycle(c) { saveJSON(DB.CYCLE, c); },
+  saveCycle(c) { saveJSON(DB.CYCLE, c); notifyChanged(); },
 
   getWeekOverrides() { return loadJSON(DB.WEEK_OVERRIDES, {}); },
-  saveWeekOverrides(o) { saveJSON(DB.WEEK_OVERRIDES, o); },
+  saveWeekOverrides(o) { saveJSON(DB.WEEK_OVERRIDES, o); notifyChanged(); },
 
   exportAll() {
     const bundle = {
@@ -89,7 +99,7 @@ const Storage = {
       cycle: Storage.getCycle(),
       weekOverrides: Storage.getWeekOverrides()
     };
-    const stripped = { ...bundle, settings: { ...bundle.settings, aiApiKey: '' } };
+    const stripped = { ...bundle, settings: { ...bundle.settings, aiApiKey: '', githubToken: '' } };
     const blob = new Blob([JSON.stringify(stripped, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -108,7 +118,7 @@ const Storage = {
       if (bundle.weekOverrides) Storage.saveWeekOverrides(bundle.weekOverrides);
       if (bundle.settings) {
         const current = Storage.getSettings();
-        Storage.saveSettings({ ...bundle.settings, aiApiKey: current.aiApiKey });
+        Storage.saveSettings({ ...bundle.settings, aiApiKey: current.aiApiKey, githubToken: current.githubToken, githubGistId: current.githubGistId });
       }
       return true;
     } catch (e) {

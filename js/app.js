@@ -683,6 +683,20 @@ function renderSettingsTab() {
       </div>
     </div>
     <div class="card">
+      <h3>Cross-device sync (GitHub)</h3>
+      <p class="helper-text">Stores your plan and logs in a private Gist on your GitHub account. Any device with the same token stays in sync automatically — never your API keys. Create a token at
+        <a href="https://github.com/settings/tokens/new?description=Iron%20Log%20sync&scopes=gist" target="_blank" rel="noopener">github.com/settings/tokens/new</a>
+        — check only the <strong>gist</strong> scope, set an expiration you're comfortable with, generate, and paste it below.</p>
+      <div class="row">
+        <div><label>GitHub personal access token</label><input id="setGithubToken" type="password" value="${s.githubToken || ''}" placeholder="ghp_..."></div>
+      </div>
+      <div class="row" style="margin-top:8px;">
+        <button class="btn btn-sm" id="pullNowBtn">Pull latest</button>
+        <button class="btn btn-sm" id="pushNowBtn">Push now</button>
+      </div>
+      <p class="helper-text" id="syncStatus">${s.githubLastSync ? `Last synced: ${new Date(s.githubLastSync).toLocaleString()}` : 'Not synced yet.'}</p>
+    </div>
+    <div class="card">
       <h3>Backup</h3>
       <div class="row">
         <button class="btn" id="exportBtn">Export backup (.json)</button>
@@ -708,6 +722,38 @@ function renderSettingsTab() {
   $('#setDeload').onchange = e => { const c = Storage.getCycle(); c.deloadEvery = Math.max(2, Number(e.target.value) || 5); Storage.saveCycle(c); renderWeekDial(); toast('Saved.'); };
   $('#setPeak').onchange = e => { const c = Storage.getCycle(); c.peakEvery = Math.max(0, Number(e.target.value) || 0); Storage.saveCycle(c); toast('Saved.'); };
 
+  $('#setGithubToken').onchange = async (e) => {
+    const token = e.target.value.trim();
+    const cur = Storage.getSettings();
+    const hadToken = !!cur.githubToken;
+    cur.githubToken = token;
+    Storage.saveSettingsSilent(cur);
+    if (!token) { toast('GitHub sync disconnected.'); renderSettingsTab(); return; }
+    if (hadToken) { toast('Token updated.'); return; }
+    toast('Connecting to GitHub…');
+    const pullRes = await Sync.pull();
+    if (pullRes.ok) {
+      toast('Found existing data — pulled it in.');
+      renderActiveTab();
+    } else {
+      const pushRes = await Sync.push();
+      toast(pushRes.ok ? 'Created new sync store on GitHub.' : pushRes.message);
+    }
+    renderSettingsTab();
+  };
+  $('#pullNowBtn').onclick = async () => {
+    $('#syncStatus').textContent = 'Pulling…';
+    const res = await Sync.pull();
+    toast(res.message);
+    renderActiveTab();
+  };
+  $('#pushNowBtn').onclick = async () => {
+    $('#syncStatus').textContent = 'Pushing…';
+    const res = await Sync.push();
+    toast(res.message);
+    renderSettingsTab();
+  };
+
   $('#exportBtn').onclick = () => Storage.exportAll();
   $('#importBtn').onclick = () => $('#importFile').click();
   $('#importFile').onchange = (e) => {
@@ -731,7 +777,13 @@ function renderSettingsTab() {
 }
 
 /* ---------------- INIT ---------------- */
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   $all('.tab-btn').forEach(b => b.onclick = () => switchTab(b.dataset.tab));
+  const s = Storage.getSettings();
+  if (s.githubToken) {
+    toast('Syncing with GitHub…');
+    const res = await Sync.pull();
+    if (res.ok) toast('Synced from GitHub.');
+  }
   switchTab('today');
 });
