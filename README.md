@@ -81,6 +81,8 @@ public strength-standard calculators. Tag an exercise in Plan with a
 enter a number manually. Treat tiers as a motivating estimate, not a
 certified test.
 
+- **Plan review** — a "Review my week" button at the top of Plan that checks your whole week at once: volume outside typical ranges per muscle, muscle groups with no direct work, back-to-back scheduling that doesn't respect typical recovery windows, rep ranges that never vary, a single day overloaded for one muscle, and exercises repeated a lot across the week. The checks always run for free; if AI is on, a short prioritized written summary is layered on top.
+
 ## What's new in this version
 
 - **Progress tab** — pick any exercise and see an estimated-1RM trend line over time (Epley formula), plus a consistency panel (current week streak, total sessions, 7-day adherence).
