@@ -22,6 +22,95 @@ function toast(msg) {
 
 function fmtWeight(w, unit) { return `${w}${unit}`; }
 
+function applyTheme() {
+  const s = Storage.getSettings();
+  document.documentElement.dataset.theme = s.theme || 'iron';
+}
+
+function renderProfileButton() {
+  const { name } = Profiles.getActive();
+  $('#profileNameLabel').textContent = name || 'Set up';
+  $('#profileAvatar').textContent = name ? name.trim()[0].toUpperCase() : '+';
+}
+
+function toggleProfilePanel() {
+  const panel = $('#profilePanel');
+  if (panel.style.display === 'none') { renderProfilePanel(); panel.style.display = 'block'; }
+  else panel.style.display = 'none';
+}
+
+function renderProfilePanel() {
+  const panel = $('#profilePanel');
+  const names = Profiles.list();
+  const activeName = Profiles.activeName();
+  const settings = Storage.getSettings();
+  panel.innerHTML = `
+    ${names.length === 0 ? '<p class="helper-text" style="margin-top:0;">Welcome! Create a profile to get started — everyone sharing this app gets their own plan, logs, and theme.</p>' : ''}
+    <h3>Profiles</h3>
+    <div class="profile-list" id="profileListWrap"></div>
+    <div class="row" style="margin-bottom:10px;">
+      <input id="newProfileName" placeholder="New profile name">
+      <button class="btn btn-sm btn-primary" id="createProfileBtn">Create</button>
+    </div>
+    ${names.length > 1 ? `
+    <h3>Push my plan to…</h3>
+    <div class="row" style="margin-bottom:10px;">
+      <select id="pushTargetSelect">${names.filter(n => n !== activeName).map(n => `<option>${n}</option>`).join('')}</select>
+      <button class="btn btn-sm" id="pushPlanBtn">Push</button>
+    </div>` : ''}
+    ${names.length > 0 ? `<h3>Theme</h3><div class="theme-swatches" id="themeSwatches"></div>` : ''}
+  `;
+  const listWrap = $('#profileListWrap');
+  names.forEach(n => {
+    const b = document.createElement('button');
+    b.className = n === activeName ? 'active' : '';
+    b.innerHTML = `<span class="profile-avatar" style="width:20px;height:20px;font-size:9px;">${n[0].toUpperCase()}</span> ${n}`;
+    b.onclick = () => {
+      Profiles.setActive(n);
+      applyTheme();
+      $('#profilePanel').style.display = 'none';
+      renderProfileButton();
+      renderActiveTab();
+      toast(`Switched to ${n}.`);
+    };
+    listWrap.appendChild(b);
+  });
+  $('#createProfileBtn').onclick = () => {
+    const name = $('#newProfileName').value.trim();
+    if (!name) return;
+    const wasEmpty = names.length === 0;
+    const ok = Profiles.create(name);
+    if (ok) {
+      applyTheme();
+      renderProfileButton();
+      $('#profilePanel').style.display = 'none';
+      renderActiveTab();
+      toast(`Created profile "${name}".`);
+    } else {
+      toast('That name is taken — try another.');
+    }
+  };
+  const pushBtn = $('#pushPlanBtn');
+  if (pushBtn) pushBtn.onclick = () => {
+    const target = $('#pushTargetSelect').value;
+    if (!confirm(`Push your current plan to ${target}? This replaces their existing plan.`)) return;
+    const ok = Profiles.pushPlanTo(target);
+    toast(ok ? `Pushed your plan to ${target}.` : 'Push failed.');
+  };
+  const swatchWrap = $('#themeSwatches');
+  if (swatchWrap) {
+    const swatchColors = { iron: '#4C8DFF', pink: '#F0559C', night: '#7B8794' };
+    THEMES.forEach(t => {
+      const sw = document.createElement('div');
+      sw.className = 'theme-swatch' + (settings.theme === t ? ' active' : '');
+      sw.style.background = swatchColors[t];
+      sw.title = t.charAt(0).toUpperCase() + t.slice(1);
+      sw.onclick = () => { Storage.saveSettings({ theme: t }); applyTheme(); renderProfilePanel(); };
+      swatchWrap.appendChild(sw);
+    });
+  }
+}
+
 function allPlanExercises() {
   const plan = Storage.getPlan();
   const seen = new Map();
@@ -94,6 +183,14 @@ function renderPlanTab() {
   panel.innerHTML = `
     <div class="card">
       <div class="row" style="justify-content:space-between;">
+        <h3>Build a plan with AI</h3>
+        <button class="btn btn-sm" id="openBuilderBtn">Build my plan</button>
+      </div>
+      <p class="helper-text">Answer a few questions and get a full weekly plan generated for you — you'll see a preview before anything replaces your current plan.</p>
+      <div id="planBuilderForm"></div>
+    </div>
+    <div class="card">
+      <div class="row" style="justify-content:space-between;">
         <h3>Plan review</h3>
         <button class="btn btn-primary btn-sm" id="reviewPlanBtn">Review my week</button>
       </div>
@@ -111,6 +208,7 @@ function renderPlanTab() {
     </div>
     <div id="addExerciseForm"></div>
   `;
+  $('#openBuilderBtn').onclick = () => renderPlanBuilderForm();
   $('#reviewPlanBtn').onclick = () => runPlanReview(plan);
 
   const dayTabs = $('#planDayTabs');
@@ -179,6 +277,109 @@ function renderPlanTab() {
   }
 
   $('#addExerciseBtn').onclick = () => renderAddExerciseForm();
+}
+
+const EQUIPMENT_OPTIONS = ['Barbell', 'Dumbbells', 'Machines', 'Cables', 'Bodyweight only', 'Kettlebells', 'Bands'];
+let builderState = { equipment: ['Barbell', 'Dumbbells', 'Machines', 'Cables'], days: 4, focus: [] };
+
+function renderPlanBuilderForm() {
+  const container = $('#planBuilderForm');
+  if (!Storage.getSettings().aiEnabled) {
+    container.innerHTML = `<p class="helper-text">Turn on AI in Settings and add a Gemini key to use the plan builder.</p>`;
+    return;
+  }
+  container.innerHTML = `
+    <div style="margin-top:10px;">
+      <label>Equipment you have access to</label>
+      <div class="builder-chip-group" id="builderEquipment"></div>
+    </div>
+    <div class="row" style="margin-top:12px;">
+      <div><label>Days per week</label><input id="builderDays" type="number" min="1" max="7" value="${builderState.days}"></div>
+    </div>
+    <div style="margin-top:12px;">
+      <label>Muscle groups to focus on (optional — leave blank for a balanced plan)</label>
+      <div class="builder-chip-group" id="builderFocus"></div>
+    </div>
+    <button class="btn btn-primary btn-sm" id="generatePlanBtn" style="margin-top:12px;">Generate plan</button>
+    <div id="builderResult"></div>
+  `;
+  const eqWrap = $('#builderEquipment');
+  EQUIPMENT_OPTIONS.forEach(eq => {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'builder-chip' + (builderState.equipment.includes(eq) ? ' selected' : '');
+    chip.textContent = eq;
+    chip.onclick = () => {
+      builderState.equipment = builderState.equipment.includes(eq)
+        ? builderState.equipment.filter(e => e !== eq)
+        : [...builderState.equipment, eq];
+      chip.classList.toggle('selected');
+    };
+    eqWrap.appendChild(chip);
+  });
+  const focusWrap = $('#builderFocus');
+  MUSCLES.forEach(m => {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'builder-chip' + (builderState.focus.includes(m) ? ' selected' : '');
+    chip.textContent = m;
+    chip.onclick = () => {
+      builderState.focus = builderState.focus.includes(m)
+        ? builderState.focus.filter(x => x !== m)
+        : [...builderState.focus, m];
+      chip.classList.toggle('selected');
+    };
+    focusWrap.appendChild(chip);
+  });
+  $('#builderDays').onchange = (e) => { builderState.days = Math.max(1, Math.min(7, Number(e.target.value) || 4)); };
+
+  $('#generatePlanBtn').onclick = async () => {
+    builderState.days = Math.max(1, Math.min(7, Number($('#builderDays').value) || 4));
+    const btn = $('#generatePlanBtn');
+    btn.disabled = true; btn.textContent = 'Generating…';
+    const settings = Storage.getSettings();
+    const result = await AI.buildPlan({
+      equipment: builderState.equipment.length ? builderState.equipment : ['Bodyweight only'],
+      days: builderState.days,
+      focus: builderState.focus,
+      units: settings.units
+    });
+    btn.disabled = false; btn.textContent = 'Generate plan';
+    const resultEl = $('#builderResult');
+    if (!result.ok) {
+      resultEl.innerHTML = `<div class="plateau-banner">${result.message}</div>`;
+      return;
+    }
+    renderBuilderPreview(resultEl, result.plan, settings.units);
+  };
+}
+
+function renderBuilderPreview(container, generatedPlan, unit) {
+  const dayCards = DAYS.map(day => {
+    const list = generatedPlan.days[day] || [];
+    if (list.length === 0) return '';
+    return `<div class="builder-preview-day"><div class="bp-day-title">${day}</div>${list.map(ex =>
+      `<div class="builder-preview-ex">${ex.name} — ${ex.muscle}, ${ex.sets}×${ex.repLow}-${ex.repHigh} @ ${ex.currentWeight}${unit}</div>`
+    ).join('')}</div>`;
+  }).join('');
+  container.innerHTML = `
+    <div class="card" style="margin-top:12px;background:var(--surface-2);">
+      <h3>Preview</h3>
+      ${dayCards || '<p class="helper-text">The AI returned an empty plan — try generating again.</p>'}
+      <div class="row" style="margin-top:10px;">
+        <button class="btn btn-primary btn-sm" id="applyBuilderPlanBtn">Apply — replace my current plan</button>
+        <button class="btn btn-sm" id="discardBuilderPlanBtn">Discard</button>
+      </div>
+    </div>
+  `;
+  $('#applyBuilderPlanBtn').onclick = () => {
+    if (!confirm('This replaces every day in your current plan. Continue?')) return;
+    Storage.savePlan(generatedPlan);
+    $('#planBuilderForm').innerHTML = '';
+    renderPlanTab();
+    toast('New plan applied.');
+  };
+  $('#discardBuilderPlanBtn').onclick = () => { container.innerHTML = ''; };
 }
 
 function runPlanReview(plan) {
@@ -701,7 +902,7 @@ function renderSettingsTab() {
     </div>
     <div class="card">
       <h3>AI assist</h3>
-      <p class="helper-text">Used only for exercise suggestions and form/mind-muscle cues. Your key is stored solely in this browser and calls go directly to Google's Gemini API — nothing passes through any server of mine. Get a free key at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>.</p>
+      <p class="helper-text">Used for exercise suggestions, form/mind-muscle cues, plan review, and the AI plan builder. This key is <strong>shared across every profile</strong> and, if GitHub sync is on, travels with your synced data — so entering it once here makes AI available on your partner's profile and device too, without them needing their own key. That also means anyone with access to your synced data could see this key, so use a key you're comfortable sharing within your household. Calls go directly from the browser to Google's API — nothing passes through any server of mine. Get a free key at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>.</p>
       <div class="row">
         <div><label>Enable AI</label><select id="setAiEnabled"><option value="false" ${!s.aiEnabled?'selected':''}>Off</option><option value="true" ${s.aiEnabled?'selected':''}>On</option></select></div>
         <div><label>Gemini API key</label><input id="setAiKey" type="password" value="${s.aiApiKey||''}" placeholder="Paste your key"></div>
@@ -724,15 +925,15 @@ function renderSettingsTab() {
     <div class="card">
       <h3>Backup</h3>
       <div class="row">
-        <button class="btn" id="exportBtn">Export backup (.json)</button>
-        <button class="btn" id="importBtn">Import backup</button>
+        <button class="btn" id="exportBtn">Export this profile (.json)</button>
+        <button class="btn" id="importBtn">Import a profile</button>
         <input type="file" id="importFile" accept="application/json" style="display:none;">
       </div>
-      <p class="helper-text">Your data lives in this browser only. Export regularly, especially before clearing browser data or switching devices.</p>
+      <p class="helper-text">Exports only your currently active profile (${Profiles.activeName() || 'none selected'}). Importing adds it as a new profile rather than overwriting — handy for moving a profile to a fresh browser.</p>
     </div>
     <div class="card">
       <h3>Danger zone</h3>
-      <button class="btn btn-danger" id="wipeBtn">Erase all data on this device</button>
+      <button class="btn btn-danger" id="wipeBtn">Erase all profiles &amp; data on this device</button>
     </div>
   `;
 
@@ -799,9 +1000,13 @@ function renderSettingsTab() {
     reader.readAsText(file);
   };
   $('#wipeBtn').onclick = () => {
-    if (confirm('This erases every plan, log, and setting on this device. This cannot be undone. Continue?')) {
+    if (confirm('This erases every profile, plan, log, and setting on this device. This cannot be undone. Continue?')) {
       Storage.wipeAll();
       toast('All data erased.');
+      applyTheme();
+      renderProfileButton();
+      renderProfilePanel();
+      $('#profilePanel').style.display = 'block';
       renderActiveTab();
     }
   };
@@ -810,6 +1015,24 @@ function renderSettingsTab() {
 /* ---------------- INIT ---------------- */
 document.addEventListener('DOMContentLoaded', async () => {
   $all('.tab-btn').forEach(b => b.onclick = () => switchTab(b.dataset.tab));
+
+  $('#profileBtn').onclick = () => toggleProfilePanel();
+  document.addEventListener('click', (e) => {
+    const panel = $('#profilePanel');
+    const btn = $('#profileBtn');
+    if (panel.style.display !== 'none' && !panel.contains(e.target) && !btn.contains(e.target)) {
+      if (Storage.hasAnyProfile()) panel.style.display = 'none';
+    }
+  });
+
+  applyTheme();
+  renderProfileButton();
+
+  if (!Storage.hasAnyProfile()) {
+    renderProfilePanel();
+    $('#profilePanel').style.display = 'block';
+  }
+
   const s = Storage.getSettings();
   if (s.githubToken) {
     if (Sync.hasPendingLocalChanges()) {
@@ -818,8 +1041,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     } else {
       toast('Checking GitHub for updates…');
       const res = await Sync.pull();
-      if (res.ok) toast('Synced from GitHub.');
+      if (res.ok) { toast('Synced from GitHub.'); applyTheme(); renderProfileButton(); }
     }
   }
-  switchTab('today');
+  if (Storage.hasAnyProfile()) switchTab('today');
 });

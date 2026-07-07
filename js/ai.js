@@ -63,12 +63,62 @@ const AI = {
     }
   },
 
+  async buildPlan({ equipment, days, focus, units }) {
+    if (!AI.isConfigured()) {
+      return { ok: false, message: 'Turn on AI in Settings and add a Gemini key to use the plan builder.' };
+    }
+    const muscleList = MUSCLES.join(', ');
+    const dayList = DAYS.join(', ');
+    const focusLine = focus && focus.length ? `Give extra emphasis (more sets, and/or an extra exercise) to: ${focus.join(', ')}.` : 'Aim for a balanced spread across all major muscle groups.';
+    const prompt = `You are an experienced strength coach building a weekly training plan.
+
+Equipment available: ${equipment.join(', ')}.
+Train ${days} day(s) per week — pick which ${days} of these 7 days to use: ${dayList}. Leave the other days as empty arrays.
+${focusLine}
+Use only these muscle names exactly: ${muscleList}.
+Weight unit: ${units}. Use conservative, sensible starting weights a lifter of unknown current strength could safely handle for each exercise's rep range (it's fine to guess moderate/light).
+
+Respond with ONLY valid JSON, no markdown fences, no commentary, matching exactly this shape:
+{"days":{"Monday":[{"name":"Exercise name","muscle":"Chest","type":"compound","lowerBody":false,"sets":3,"repLow":8,"repHigh":12,"currentWeight":45}],"Tuesday":[],"Wednesday":[],"Thursday":[],"Friday":[],"Saturday":[],"Sunday":[]}}
+"type" must be "compound" or "isolation". "lowerBody" must be true or false. Every one of the 7 day keys must be present, using an empty array for rest days.`;
+
+    try {
+      const text = await AI.callGemini(prompt);
+      const cleaned = text.replace(/```json|```/g, '').trim();
+      const parsed = JSON.parse(cleaned);
+      if (!parsed.days) throw new Error('Missing "days" in AI response.');
+      const sanitized = { days: {} };
+      DAYS.forEach(day => {
+        const list = Array.isArray(parsed.days[day]) ? parsed.days[day] : [];
+        sanitized.days[day] = list
+          .filter(ex => ex && ex.name && MUSCLES.includes(ex.muscle))
+          .map(ex => ({
+            id: uid(),
+            name: String(ex.name).slice(0, 60),
+            muscle: ex.muscle,
+            type: ex.type === 'isolation' ? 'isolation' : 'compound',
+            lowerBody: !!ex.lowerBody,
+            standardLift: null,
+            sets: Math.max(1, Math.min(8, Number(ex.sets) || 3)),
+            repLow: Math.max(1, Math.min(30, Number(ex.repLow) || 8)),
+            repHigh: Math.max(1, Math.min(30, Number(ex.repHigh) || 12)),
+            currentWeight: Math.max(0, Number(ex.currentWeight) || 0),
+            unit: units
+          }));
+      });
+      return { ok: true, plan: sanitized };
+    } catch (e) {
+      console.error(e);
+      return { ok: false, message: 'AI plan generation failed — try again in a moment.' };
+    }
+  },
+
   async reviewPlan(planSummary) {
     if (!AI.isConfigured()) {
       return { text: 'Turn on AI in Settings and add a free Gemini key for a written, prioritized summary on top of the checks above.', source: 'offline' };
     }
     try {
-      const prompt = `You are an experienced, practical strength coach. Here is a lifter's weekly training plan and a list of automatically-detected flags:\n\n${planSummary}\n\nGive 3-5 concise, prioritized, practical suggestions for set/rep changes or restructuring, focused on the most important issues first. Plain language, no fluff, no disclaimers, under 150 words total.`;
+      const prompt = `You are an experienced, practical strength coach. Here is a lifter's weekly training plan and a list of automatically-detected flags:\n\n${planSummary}\n\nGive concise, prioritized, practical feedback, focused on the most important issues first. Where a flag points to a real problem, explicitly recommend which specific exercise(s) to remove and which to add or swap in instead (name real exercises), not just general advice. Plain language, no fluff, no disclaimers, under 170 words total.`;
       const text = await AI.callGemini(prompt);
       return { text, source: 'ai' };
     } catch (e) {

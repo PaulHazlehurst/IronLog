@@ -1,19 +1,31 @@
 /* ============================================================
-   STORAGE LAYER
-   Everything lives in localStorage on this device/browser.
-   Use Settings > Export to back up, Import to restore or move
-   to another device.
+   STORAGE LAYER — multi-profile
+   ------------------------------------------------------------
+   All profiles (e.g. you and your partner) live inside ONE
+   synced blob so either device can switch between profiles or
+   push a plan to the other. Three tiers:
+     - PROFILES: per-person data (plan, logs, cycle, theme, body
+       stats) — synced.
+     - SHARED: app-wide AI settings — synced, so entering a key
+       once on one device makes it available everywhere synced
+       to the same store.
+     - DEVICE: the GitHub token/gist id and which profile THIS
+       device currently has selected — local only, never synced
+       (a token can't usefully sync itself into the store it
+       unlocks, and each device may want its own active profile).
    ============================================================ */
 
 const DB = {
-  PLAN: 'ih_plan',          // recurring weekly template
-  LOGS: 'ih_logs',          // array of completed session logs
-  SETTINGS: 'ih_settings',  // units, bodyweight, gender, ai key
-  CYCLE: 'ih_cycle',        // periodization meta (start date, deload cadence)
-  WEEK_OVERRIDES: 'ih_week_overrides' // per-week "missed day" reshuffles
+  PROFILES: 'ih_profiles',        // { [name]: { plan, logs, cycle, weekOverrides, settings } }
+  SHARED: 'ih_shared',            // { aiProvider, aiApiKey, aiEnabled } — synced, app-wide
+  DEVICE: 'ih_device',            // { githubToken, githubGistId, githubLastSync, activeProfile } — local only
+  // legacy pre-profile keys, read once for migration then left alone
+  LEGACY_PLAN: 'ih_plan', LEGACY_LOGS: 'ih_logs', LEGACY_SETTINGS: 'ih_settings',
+  LEGACY_CYCLE: 'ih_cycle', LEGACY_WEEK_OVERRIDES: 'ih_week_overrides'
 };
 
 const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+const THEMES = ['iron', 'pink', 'night'];
 
 function loadJSON(key, fallback) {
   try {
@@ -47,14 +59,162 @@ function getLastLocalChangeAt() {
   return localStorage.getItem(LAST_CHANGE_KEY);
 }
 
-const Storage = {
-  getPlan() {
-    return loadJSON(DB.PLAN, { days: Object.fromEntries(DAYS.map(d => [d, []])) });
-  },
-  savePlan(plan) { saveJSON(DB.PLAN, plan); notifyChanged(); },
+function emptyPlan() { return { days: Object.fromEntries(DAYS.map(d => [d, []])) }; }
+function defaultProfileSettings() {
+  return {
+    units: 'lb', bodyweight: 180, gender: 'male',
+    barWeight: 45, availablePlates: [45, 35, 25, 10, 5, 2.5],
+    restTimerSound: true, manualLifts: {}, theme: 'iron'
+  };
+}
+function defaultProfile() {
+  return {
+    plan: emptyPlan(),
+    logs: [],
+    cycle: { startDate: isoDate(), deloadEvery: 5, peakEvery: 0 },
+    weekOverrides: {},
+    settings: defaultProfileSettings()
+  };
+}
+function defaultShared() { return { aiProvider: 'gemini', aiApiKey: '', aiEnabled: false }; }
+function defaultDevice() { return { githubToken: '', githubGistId: '', githubLastSync: null, activeProfile: '' }; }
 
-  getLogs() { return loadJSON(DB.LOGS, []); },
-  saveLogs(logs) { saveJSON(DB.LOGS, logs); notifyChanged(); },
+const PROFILE_SETTING_KEYS = ['units', 'bodyweight', 'gender', 'barWeight', 'availablePlates', 'restTimerSound', 'manualLifts', 'theme'];
+const SHARED_SETTING_KEYS = ['aiProvider', 'aiApiKey', 'aiEnabled'];
+const DEVICE_SETTING_KEYS = ['githubToken', 'githubGistId', 'githubLastSync'];
+
+/* ---------------- PROFILE MANAGEMENT ---------------- */
+function getAllProfilesRaw() { return loadJSON(DB.PROFILES, {}); }
+function saveAllProfilesRaw(profiles) { saveJSON(DB.PROFILES, profiles); }
+function getDeviceRaw() { return { ...defaultDevice(), ...loadJSON(DB.DEVICE, {}) }; }
+function saveDeviceRaw(d) { saveJSON(DB.DEVICE, d); }
+
+function migrateLegacyIfNeeded() {
+  const profiles = getAllProfilesRaw();
+  if (Object.keys(profiles).length > 0) return; // already on the profile system
+  const legacyPlan = loadJSON(DB.LEGACY_PLAN, null);
+  const legacyLogs = loadJSON(DB.LEGACY_LOGS, null);
+  if (!legacyPlan && !legacyLogs) return; // nothing to migrate, fresh install
+  const legacySettings = loadJSON(DB.LEGACY_SETTINGS, {});
+  const name = 'My Profile';
+  const profile = defaultProfile();
+  if (legacyPlan) profile.plan = legacyPlan;
+  if (legacyLogs) profile.logs = legacyLogs;
+  const legacyCycle = loadJSON(DB.LEGACY_CYCLE, null);
+  if (legacyCycle) profile.cycle = legacyCycle;
+  const legacyOverrides = loadJSON(DB.LEGACY_WEEK_OVERRIDES, null);
+  if (legacyOverrides) profile.weekOverrides = legacyOverrides;
+  PROFILE_SETTING_KEYS.forEach(k => { if (legacySettings[k] !== undefined) profile.settings[k] = legacySettings[k]; });
+  profiles[name] = profile;
+  saveAllProfilesRaw(profiles);
+
+  const shared = { ...defaultShared(), ...loadJSON(DB.SHARED, {}) };
+  SHARED_SETTING_KEYS.forEach(k => { if (legacySettings[k] !== undefined) shared[k] = legacySettings[k]; });
+  saveJSON(DB.SHARED, shared);
+
+  const device = getDeviceRaw();
+  DEVICE_SETTING_KEYS.forEach(k => { if (legacySettings[k] !== undefined) device[k] = legacySettings[k]; });
+  device.activeProfile = name;
+  saveDeviceRaw(device);
+}
+
+const Profiles = {
+  list() { return Object.keys(getAllProfilesRaw()); },
+
+  activeName() {
+    migrateLegacyIfNeeded();
+    const device = getDeviceRaw();
+    const names = Profiles.list();
+    if (device.activeProfile && names.includes(device.activeProfile)) return device.activeProfile;
+    return names[0] || '';
+  },
+
+  setActive(name) {
+    const device = getDeviceRaw();
+    device.activeProfile = name;
+    saveDeviceRaw(device);
+  },
+
+  create(name, theme) {
+    name = name.trim();
+    if (!name) return false;
+    const profiles = getAllProfilesRaw();
+    if (profiles[name]) return false;
+    const p = defaultProfile();
+    if (theme) p.settings.theme = theme;
+    profiles[name] = p;
+    saveAllProfilesRaw(profiles);
+    Profiles.setActive(name);
+    notifyChanged();
+    return true;
+  },
+
+  rename(oldName, newName) {
+    newName = newName.trim();
+    if (!newName || oldName === newName) return false;
+    const profiles = getAllProfilesRaw();
+    if (!profiles[oldName] || profiles[newName]) return false;
+    profiles[newName] = profiles[oldName];
+    delete profiles[oldName];
+    saveAllProfilesRaw(profiles);
+    if (Profiles.activeName() === oldName) Profiles.setActive(newName);
+    notifyChanged();
+    return true;
+  },
+
+  delete(name) {
+    const profiles = getAllProfilesRaw();
+    if (!profiles[name] || Profiles.list().length <= 1) return false;
+    delete profiles[name];
+    saveAllProfilesRaw(profiles);
+    if (Profiles.activeName() === name) Profiles.setActive(Object.keys(profiles)[0]);
+    notifyChanged();
+    return true;
+  },
+
+  // Copies the active profile's plan (exercise template only, not logs)
+  // into another profile.
+  pushPlanTo(targetName) {
+    const profiles = getAllProfilesRaw();
+    const activeName = Profiles.activeName();
+    if (!profiles[activeName] || !profiles[targetName] || activeName === targetName) return false;
+    profiles[targetName].plan = JSON.parse(JSON.stringify(profiles[activeName].plan));
+    saveAllProfilesRaw(profiles);
+    notifyChanged();
+    return true;
+  },
+
+  getActive() {
+    migrateLegacyIfNeeded();
+    let profiles = getAllProfilesRaw();
+    let name = Profiles.activeName();
+    if (!name) {
+      // Truly fresh install — caller (app.js) should prompt to create one;
+      // hand back a scratch profile in the meantime so nothing crashes.
+      return { name: '', data: defaultProfile() };
+    }
+    if (!profiles[name]) { profiles[name] = defaultProfile(); saveAllProfilesRaw(profiles); }
+    return { name, data: profiles[name] };
+  },
+
+  updateActive(mutator) {
+    const profiles = getAllProfilesRaw();
+    const name = Profiles.activeName();
+    if (!name) return;
+    if (!profiles[name]) profiles[name] = defaultProfile();
+    mutator(profiles[name]);
+    saveAllProfilesRaw(profiles);
+  }
+};
+
+const Storage = {
+  hasAnyProfile() { migrateLegacyIfNeeded(); return Profiles.list().length > 0; },
+
+  getPlan() { return Profiles.getActive().data.plan || emptyPlan(); },
+  savePlan(plan) { Profiles.updateActive(p => p.plan = plan); notifyChanged(); },
+
+  getLogs() { return Profiles.getActive().data.logs || []; },
+  saveLogs(logs) { Profiles.updateActive(p => p.logs = logs); notifyChanged(); },
   addLog(entry) {
     const logs = Storage.getLogs();
     logs.push(entry);
@@ -62,56 +222,49 @@ const Storage = {
   },
 
   getSettings() {
-    const defaults = {
-      units: 'lb',
-      bodyweight: 180,
-      gender: 'male',
-      aiProvider: 'gemini',
-      aiApiKey: '',
-      aiEnabled: false,
-      barWeight: 45,
-      availablePlates: [45, 35, 25, 10, 5, 2.5],
-      restTimerSound: true,
-      manualLifts: {},
-      githubToken: '',
-      githubGistId: '',
-      githubLastSync: null
-    };
-    return { ...defaults, ...loadJSON(DB.SETTINGS, {}) };
+    const profile = Profiles.getActive().data;
+    const shared = { ...defaultShared(), ...loadJSON(DB.SHARED, {}) };
+    const device = getDeviceRaw();
+    return { ...defaultProfileSettings(), ...profile.settings, ...shared, ...device };
   },
-  saveSettings(s) { saveJSON(DB.SETTINGS, s); notifyChanged(); },
+  saveSettings(s) { Storage._splitSaveSettings(s, true); },
   // Same as saveSettings but never triggers a sync push — used when Sync
   // itself is writing back gistId/lastSync so it doesn't loop on itself.
-  saveSettingsSilent(s) { saveJSON(DB.SETTINGS, s); },
-
-  getCycle() {
-    return loadJSON(DB.CYCLE, {
-      startDate: new Date().toISOString().slice(0,10),
-      deloadEvery: 5,   // train N-1 weeks, then a deload week
-      peakEvery: 0      // 0 = disabled; else weeks between test/peak weeks
+  saveSettingsSilent(s) { Storage._splitSaveSettings(s, false); },
+  _splitSaveSettings(s, shouldNotify) {
+    Profiles.updateActive(p => {
+      p.settings = p.settings || defaultProfileSettings();
+      PROFILE_SETTING_KEYS.forEach(k => { if (k in s) p.settings[k] = s[k]; });
     });
+    const shared = { ...defaultShared(), ...loadJSON(DB.SHARED, {}) };
+    SHARED_SETTING_KEYS.forEach(k => { if (k in s) shared[k] = s[k]; });
+    saveJSON(DB.SHARED, shared);
+    const device = getDeviceRaw();
+    DEVICE_SETTING_KEYS.forEach(k => { if (k in s) device[k] = s[k]; });
+    saveDeviceRaw(device);
+    if (shouldNotify) notifyChanged();
   },
-  saveCycle(c) { saveJSON(DB.CYCLE, c); notifyChanged(); },
 
-  getWeekOverrides() { return loadJSON(DB.WEEK_OVERRIDES, {}); },
-  saveWeekOverrides(o) { saveJSON(DB.WEEK_OVERRIDES, o); notifyChanged(); },
+  getCycle() { return Profiles.getActive().data.cycle || defaultProfile().cycle; },
+  saveCycle(c) { Profiles.updateActive(p => p.cycle = c); notifyChanged(); },
+
+  getWeekOverrides() { return Profiles.getActive().data.weekOverrides || {}; },
+  saveWeekOverrides(o) { Profiles.updateActive(p => p.weekOverrides = o); notifyChanged(); },
 
   exportAll() {
+    const { name, data } = Profiles.getActive();
     const bundle = {
-      version: 1,
+      version: 2,
       exportedAt: new Date().toISOString(),
-      plan: Storage.getPlan(),
-      logs: Storage.getLogs(),
-      settings: Storage.getSettings(),
-      cycle: Storage.getCycle(),
-      weekOverrides: Storage.getWeekOverrides()
+      profileName: name,
+      profile: data,
+      shared: { ...defaultShared(), ...loadJSON(DB.SHARED, {}), aiApiKey: '' }
     };
-    const stripped = { ...bundle, settings: { ...bundle.settings, aiApiKey: '', githubToken: '' } };
-    const blob = new Blob([JSON.stringify(stripped, null, 2)], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `iron-log-backup-${bundle.exportedAt.slice(0,10)}.json`;
+    a.download = `iron-log-${(name || 'profile').replace(/\s+/g, '-')}-${bundle.exportedAt.slice(0,10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
   },
@@ -119,15 +272,31 @@ const Storage = {
   importAll(json) {
     try {
       const bundle = JSON.parse(json);
-      if (bundle.plan) Storage.savePlan(bundle.plan);
-      if (bundle.logs) Storage.saveLogs(bundle.logs);
-      if (bundle.cycle) Storage.saveCycle(bundle.cycle);
-      if (bundle.weekOverrides) Storage.saveWeekOverrides(bundle.weekOverrides);
-      if (bundle.settings) {
-        const current = Storage.getSettings();
-        Storage.saveSettings({ ...bundle.settings, aiApiKey: current.aiApiKey, githubToken: current.githubToken, githubGistId: current.githubGistId });
+      if (bundle.version === 2 && bundle.profile) {
+        const profiles = getAllProfilesRaw();
+        let name = bundle.profileName || 'Imported';
+        let finalName = name;
+        let i = 2;
+        while (profiles[finalName]) { finalName = `${name} (${i})`; i++; }
+        profiles[finalName] = bundle.profile;
+        saveAllProfilesRaw(profiles);
+        Profiles.setActive(finalName);
+        notifyChanged();
+        return true;
       }
-      return true;
+      // legacy single-profile export
+      if (bundle.plan || bundle.logs) {
+        Profiles.updateActive(p => {
+          if (bundle.plan) p.plan = bundle.plan;
+          if (bundle.logs) p.logs = bundle.logs;
+          if (bundle.cycle) p.cycle = bundle.cycle;
+          if (bundle.weekOverrides) p.weekOverrides = bundle.weekOverrides;
+          if (bundle.settings) PROFILE_SETTING_KEYS.forEach(k => { if (bundle.settings[k] !== undefined) p.settings[k] = bundle.settings[k]; });
+        });
+        notifyChanged();
+        return true;
+      }
+      return false;
     } catch (e) {
       console.error('Import failed', e);
       return false;
@@ -135,7 +304,8 @@ const Storage = {
   },
 
   wipeAll() {
-    Object.values(DB).forEach(k => localStorage.removeItem(k));
+    [DB.PROFILES, DB.SHARED, DB.DEVICE, DB.LEGACY_PLAN, DB.LEGACY_LOGS, DB.LEGACY_SETTINGS, DB.LEGACY_CYCLE, DB.LEGACY_WEEK_OVERRIDES, LAST_CHANGE_KEY]
+      .forEach(k => localStorage.removeItem(k));
   }
 };
 

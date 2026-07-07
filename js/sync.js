@@ -1,14 +1,16 @@
 /* ============================================================
    SYNC — cross-device sync via a private GitHub Gist
    ------------------------------------------------------------
-   Your data (plan, logs, cycle settings — never your API keys)
-   is written to a private Gist on your own GitHub account. Any
-   device that has your token can find that same Gist and pull
-   the latest copy. This is last-write-wins: whichever device
-   pushes most recently "wins" if two devices are edited at the
-   same time without syncing in between — fine for a single
-   person using their own devices, not built for simultaneous
-   multi-user editing.
+   Syncs ALL profiles plus the shared AI settings in one blob —
+   so either person can switch profiles on their own device, and
+   entering an AI key once makes it available to every profile on
+   every device synced to the same Gist. The GitHub token/gist id
+   themselves stay device-local (each device already needs its
+   own copy to unlock the store in the first place).
+   Last-write-wins: whichever device pushes most recently "wins"
+   if two devices are edited at the same time without syncing in
+   between — fine for a couple of trusted devices, not built for
+   true simultaneous multi-editor conflict resolution.
    ============================================================ */
 
 const GIST_FILENAME = 'iron-log-data.json';
@@ -26,16 +28,11 @@ const Sync = {
   },
 
   buildBundle() {
-    const s = Storage.getSettings();
     return {
-      version: 1,
+      version: 2,
       updatedAt: new Date().toISOString(),
-      plan: Storage.getPlan(),
-      logs: Storage.getLogs(),
-      cycle: Storage.getCycle(),
-      weekOverrides: Storage.getWeekOverrides(),
-      // Never sync personal API keys or the token itself.
-      settings: { ...s, aiApiKey: '', githubToken: '' }
+      profiles: getAllProfilesRaw(),
+      shared: { ...defaultShared(), ...loadJSON(DB.SHARED, {}) }
     };
   },
 
@@ -47,28 +44,28 @@ const Sync = {
   },
 
   async push() {
-    const s = Storage.getSettings();
-    if (!s.githubToken) return { ok: false, message: 'No GitHub token set.' };
+    const device = getDeviceRaw();
+    if (!device.githubToken) return { ok: false, message: 'No GitHub token set.' };
     if (Sync.isBusy) return { ok: false, message: 'Sync already in progress.' };
     Sync.isBusy = true;
     try {
       const content = JSON.stringify(Sync.buildBundle(), null, 2);
-      let gistId = s.githubGistId;
+      let gistId = device.githubGistId;
       if (!gistId) {
-        const existing = await Sync.findExistingGist(s.githubToken);
+        const existing = await Sync.findExistingGist(device.githubToken);
         gistId = existing?.id || null;
       }
       let res;
       if (gistId) {
         res = await fetch(`https://api.github.com/gists/${gistId}`, {
           method: 'PATCH',
-          headers: Sync.headers(s.githubToken),
+          headers: Sync.headers(device.githubToken),
           body: JSON.stringify({ files: { [GIST_FILENAME]: { content } } })
         });
       } else {
         res = await fetch('https://api.github.com/gists', {
           method: 'POST',
-          headers: Sync.headers(s.githubToken),
+          headers: Sync.headers(device.githubToken),
           body: JSON.stringify({
             description: 'Iron Log workout data — managed by the app, safe to ignore.',
             public: false,
@@ -78,10 +75,10 @@ const Sync = {
       }
       if (!res.ok) throw new Error(`GitHub responded ${res.status}`);
       const data = await res.json();
-      const cur = Storage.getSettings();
-      cur.githubGistId = data.id;
-      cur.githubLastSync = new Date().toISOString();
-      Storage.saveSettingsSilent(cur);
+      const d = getDeviceRaw();
+      d.githubGistId = data.id;
+      d.githubLastSync = new Date().toISOString();
+      saveDeviceRaw(d);
       return { ok: true, message: 'Pushed to GitHub.' };
     } catch (e) {
       console.error(e);
@@ -92,33 +89,36 @@ const Sync = {
   },
 
   async pull() {
-    const s = Storage.getSettings();
-    if (!s.githubToken) return { ok: false, message: 'No GitHub token set.' };
+    const device = getDeviceRaw();
+    if (!device.githubToken) return { ok: false, message: 'No GitHub token set.' };
     if (Sync.isBusy) return { ok: false, message: 'Sync already in progress.' };
     Sync.isBusy = true;
     try {
-      let gistId = s.githubGistId;
+      let gistId = device.githubGistId;
       if (!gistId) {
-        const existing = await Sync.findExistingGist(s.githubToken);
+        const existing = await Sync.findExistingGist(device.githubToken);
         gistId = existing?.id || null;
       }
       if (!gistId) return { ok: false, message: 'No sync data found on GitHub yet — push from your other device first.' };
 
-      const res = await fetch(`https://api.github.com/gists/${gistId}`, { headers: Sync.headers(s.githubToken) });
+      const res = await fetch(`https://api.github.com/gists/${gistId}`, { headers: Sync.headers(device.githubToken) });
       if (!res.ok) throw new Error(`GitHub responded ${res.status}`);
       const data = await res.json();
       const content = data.files?.[GIST_FILENAME]?.content;
       if (!content) return { ok: false, message: 'Found the sync gist but it was empty.' };
       const bundle = JSON.parse(content);
 
-      if (bundle.plan) Storage.savePlan(bundle.plan);
-      if (bundle.logs) Storage.saveLogs(bundle.logs);
-      if (bundle.cycle) Storage.saveCycle(bundle.cycle);
-      if (bundle.weekOverrides) Storage.saveWeekOverrides(bundle.weekOverrides);
+      const currentActive = Profiles.activeName();
+      if (bundle.profiles) saveAllProfilesRaw(bundle.profiles);
+      if (bundle.shared) saveJSON(DB.SHARED, bundle.shared);
 
-      const cur = Storage.getSettings();
-      const merged = { ...cur, ...bundle.settings, aiApiKey: cur.aiApiKey, githubToken: cur.githubToken, githubGistId: gistId, githubLastSync: new Date().toISOString() };
-      Storage.saveSettingsSilent(merged);
+      const d = getDeviceRaw();
+      d.githubGistId = gistId;
+      d.githubLastSync = new Date().toISOString();
+      // Keep this device on the same profile if it still exists after pulling.
+      if (currentActive && bundle.profiles && bundle.profiles[currentActive]) d.activeProfile = currentActive;
+      else if (bundle.profiles) d.activeProfile = Object.keys(bundle.profiles)[0] || '';
+      saveDeviceRaw(d);
 
       return { ok: true, message: `Pulled from GitHub (saved ${bundle.updatedAt ? new Date(bundle.updatedAt).toLocaleString() : 'earlier'}).` };
     } catch (e) {
@@ -133,18 +133,18 @@ const Sync = {
   // pulling now would silently overwrite them, so callers should push
   // (or at least warn) instead of pulling blind.
   hasPendingLocalChanges() {
-    const s = Storage.getSettings();
+    const device = getDeviceRaw();
     const lastChange = getLastLocalChangeAt();
     if (!lastChange) return false;
-    if (!s.githubLastSync) return true;
-    return new Date(lastChange) > new Date(s.githubLastSync);
+    if (!device.githubLastSync) return true;
+    return new Date(lastChange) > new Date(device.githubLastSync);
   },
 
   // Called whenever local data changes; waits a couple seconds in case more
   // changes are coming (e.g. adding several sets), then pushes once.
   scheduleAutoPush() {
-    const s = Storage.getSettings();
-    if (!s.githubToken) return;
+    const device = getDeviceRaw();
+    if (!device.githubToken) return;
     clearTimeout(Sync.pushTimer);
     Sync.pushTimer = setTimeout(() => { Sync.push(); }, 2000);
   }
