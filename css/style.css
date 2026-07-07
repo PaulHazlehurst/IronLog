@@ -25,6 +25,39 @@
   --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
 }
 
+/* ---------------- THEME VARIANTS ---------------- */
+/* Default (no attribute, or data-theme="iron") uses the :root tokens above. */
+
+[data-theme="pink"] {
+  --bg: #17111A;
+  --surface: #1F1620;
+  --surface-2: #281C2A;
+  --border: #3A2A3D;
+  --text: #F3E9EE;
+  --text-dim: #A78F9E;
+  --accent: #F0559C;
+  --accent-ink: #ffffff;
+  --blue: #E88AC2;
+  --amber: #FFA94D;
+  --success: #3DDC84;
+  --gold: #D4A857;
+}
+
+[data-theme="night"] {
+  --bg: #000000;
+  --surface: #0A0A0B;
+  --surface-2: #131315;
+  --border: #232326;
+  --text: #E4E4E7;
+  --text-dim: #7C7C82;
+  --accent: #7B8794;
+  --accent-ink: #050506;
+  --blue: #5C6773;
+  --amber: #C79A5C;
+  --success: #4A9E6E;
+  --gold: #A99366;
+}
+
 * { box-sizing: border-box; }
 html {
   -webkit-tap-highlight-color: transparent;
@@ -40,6 +73,7 @@ body {
   padding-bottom: 80px; /* room for mobile bottom nav */
   overflow-x: hidden;
   max-width: 100vw;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 /* Prevent any long word/URL from forcing horizontal scroll on mobile */
@@ -535,3 +569,93 @@ input, select, textarea {
   .set-row { grid-template-columns: 22px 1fr 1fr 1fr 22px; gap: 5px; padding: 8px 6px; }
   .set-number { width: 19px; height: 19px; font-size: 10px; }
 }
+
+/* ============================================================
+   PROFILE SWITCHER
+   ============================================================ */
+.profile-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 6px 12px 6px 6px;
+  cursor: pointer;
+  font-family: var(--font-display);
+  font-size: 13px;
+}
+#profileNameLabel {
+  max-width: 90px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (max-width: 480px) {
+  #profileNameLabel { max-width: 60px; }
+}
+.profile-avatar {
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-ink);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700;
+  font-family: var(--font-display);
+  flex-shrink: 0;
+}
+
+.profile-panel {
+  position: fixed;
+  top: 62px; right: 12px;
+  width: min(320px, calc(100vw - 24px));
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 28px rgba(0,0,0,0.5);
+  padding: 14px;
+  z-index: 30;
+}
+.profile-panel h3 { font-size: 13px; margin-bottom: 8px; }
+.profile-list { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+.profile-list button {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  cursor: pointer;
+  font-size: 13px;
+  text-align: left;
+}
+.profile-list button.active { border-color: var(--accent); }
+.theme-swatches { display: flex; gap: 8px; margin-top: 6px; }
+.theme-swatch {
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  cursor: pointer;
+  border: 2px solid transparent;
+  flex-shrink: 0;
+}
+.theme-swatch.active { border-color: var(--text); }
+
+/* ============================================================
+   AI PLAN BUILDER
+   ============================================================ */
+.builder-chip-group { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.builder-chip {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.builder-chip.selected { color: var(--text); border-color: var(--accent); background: var(--surface); }
+
+.builder-preview-day { margin-bottom: 10px; }
+.builder-preview-day .bp-day-title { font-family: var(--font-display); font-size: 13px; margin-bottom: 4px; }
+.builder-preview-ex { font-size: 12.5px; color: var(--text-dim); padding: 2px 0; }
