@@ -95,6 +95,20 @@ is technically visible to anyone with access to your synced data, so use one
 you're comfortable sharing within your household rather than a personal key
 tied to a paid account.
 
+## Plan review — now actionable
+
+"Review my week" still runs the same free, rule-based checks (volume,
+recovery conflicts, missing muscle groups, rep variety, repeats). On top of
+that, the AI layer now returns individual, specific suggestions — "remove
+X", "add Y", "change Z's sets to 4×6-10" — each with a one-line reason
+grounded in a named training principle (progressive overload, specificity,
+volume landmarks, recovery, periodization). Every suggestion gets its own
+**Accept** or **Dismiss** button — nothing changes your plan until you
+approve it, one suggestion at a time. The prompt explicitly tells the model
+to stick to mainstream, well-established resistance-training science and to
+suggest fewer (or zero) changes rather than invent issues on an already
+reasonable plan.
+
 ## AI plan builder
 
 In the Plan tab, "Build my plan" asks what equipment you have, how many days
