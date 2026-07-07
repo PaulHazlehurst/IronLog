@@ -25,7 +25,7 @@ const DB = {
 };
 
 const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
-const THEMES = ['iron', 'pink', 'night', 'sunset', 'neon', 'forest', 'holiday', 'winter'];
+const THEMES = ['iron', 'pink', 'night', 'sunset', 'neon', 'forest', 'holiday', 'winter', 'sabrina'];
 const FONT_STYLES = ['modern', 'playful', 'classic'];
 
 function loadJSON(key, fallback) {
@@ -67,7 +67,7 @@ function defaultProfileSettings() {
     units: 'lb', bodyweight: 180, gender: 'male',
     barWeight: 45, availablePlates: [45, 35, 25, 10, 5, 2.5],
     restTimerSound: true, manualLifts: {}, theme: 'iron', tagColor: null, fontStyle: 'modern',
-    ambientEffect: 'none'
+    ambientEffect: 'none', themesTried: ['iron']
   };
 }
 function defaultProfile() {
@@ -82,7 +82,7 @@ function defaultProfile() {
 function defaultShared() { return { posts: [], specialDate: null }; }
 function defaultDevice() { return { githubToken: '', githubGistId: '', githubLastSync: null, activeProfile: '', lastSeenPostsAtByProfile: {}, aiProvider: 'gemini', aiApiKey: '', aiEnabled: false }; }
 
-const PROFILE_SETTING_KEYS = ['units', 'bodyweight', 'gender', 'barWeight', 'availablePlates', 'restTimerSound', 'manualLifts', 'theme', 'tagColor', 'fontStyle', 'ambientEffect'];
+const PROFILE_SETTING_KEYS = ['units', 'bodyweight', 'gender', 'barWeight', 'availablePlates', 'restTimerSound', 'manualLifts', 'theme', 'tagColor', 'fontStyle', 'ambientEffect', 'themesTried'];
 const SHARED_SETTING_KEYS = ['specialDate'];
 const DEVICE_SETTING_KEYS = ['githubToken', 'githubGistId', 'githubLastSync', 'aiProvider', 'aiApiKey', 'aiEnabled'];
 

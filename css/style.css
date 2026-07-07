@@ -133,6 +133,34 @@
   --gold: #CFE8F5;
 }
 
+[data-theme="sabrina"] {
+  --bg: #FBEAEC;
+  --surface: #FFF4F5;
+  --surface-2: #FCE1E6;
+  --border: #F3C2CC;
+  --text: #5A2432;
+  --text-dim: #A97183;
+  --accent: #E63950;
+  --accent-ink: #ffffff;
+  --blue: #C9932E;
+  --amber: #E0A83D;
+  --success: #4FAE7A;
+  --gold: #D4AF37;
+  --radius: 22px;
+  --radius-sm: 16px;
+}
+[data-theme="sabrina"] .app-header {
+  background-image: repeating-linear-gradient(45deg, rgba(230,57,80,0.05) 0 10px, transparent 10px 20px);
+}
+[data-theme="sabrina"] .app-header h1::before { content: "🎀 "; }
+[data-theme="sabrina"] .card {
+  border-style: dashed;
+  border-width: 2px;
+}
+[data-theme="sabrina"] .btn-primary {
+  box-shadow: 0 2px 0 rgba(90,36,50,0.15);
+}
+
 /* ---------------- FONT VARIANTS ---------------- */
 /* "modern" (default) uses the :root fonts above. */
 [data-font="playful"] {
@@ -719,7 +747,8 @@ input, select, textarea {
   text-align: left;
 }
 .profile-list button.active { border-color: var(--accent); }
-.theme-swatches { display: flex; gap: 8px; margin-top: 6px; }
+.theme-swatches { display: flex; gap: 8px; margin-top: 6px; overflow-x: auto; padding-bottom: 6px; flex-wrap: nowrap; }
+.theme-swatch { flex-shrink: 0; }
 .theme-swatch {
   width: 34px; height: 34px;
   border-radius: 50%;
@@ -829,6 +858,90 @@ textarea {
 @keyframes ambientFall {
   to { transform: translateY(115vh) translateX(24px); }
 }
+
+/* ============================================================
+   FRIENDLY COMPETITION
+   ============================================================ */
+.competition-rows { display: flex; flex-direction: column; gap: 8px; }
+.competition-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+}
+.competition-name { font-family: var(--font-display); font-size: 13px; flex: 1; }
+.competition-sessions { font-family: var(--font-mono); font-size: 13px; color: var(--text-dim); }
+
+/* ============================================================
+   TROPHY CASE
+   ============================================================ */
+.badge-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
+  gap: 10px;
+}
+.badge-tile {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 6px;
+  text-align: center;
+  opacity: 0.35;
+  filter: grayscale(1);
+}
+.badge-tile.unlocked {
+  opacity: 1;
+  filter: none;
+  border-color: var(--gold);
+  animation: popIn 0.4s ease;
+}
+.badge-icon { font-size: 26px; margin-bottom: 4px; }
+.badge-label { font-family: var(--font-display); font-size: 10.5px; }
+.badge-hint { font-size: 9px; color: var(--text-dim); margin-top: 2px; }
+
+/* ============================================================
+   LIVE WORKOUT MODE
+   ============================================================ */
+.workout-mode-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--bg);
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  animation: fadeInUp 0.25s ease;
+}
+.wm-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+}
+.wm-progress { font-family: var(--font-mono); font-size: 13px; color: var(--text-dim); }
+.wm-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 18px;
+}
+.wm-exercise-name {
+  font-size: 28px;
+  text-align: center;
+  margin-bottom: 4px;
+}
+.wm-nav {
+  display: flex;
+  gap: 10px;
+  padding: 14px 18px;
+  border-top: 1px solid var(--border);
+}
+.wm-nav .btn { flex: 1; padding: 16px; font-size: 15px; }
+.workout-mode-overlay .set-row input { font-size: 18px; padding: 12px 8px; }
+.workout-mode-overlay .set-number { width: 28px; height: 28px; font-size: 13px; }
 
 /* ============================================================
    PLAN REVIEW — actionable AI suggestions

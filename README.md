@@ -105,6 +105,34 @@ Small motion throughout: tabs fade in on switch, buttons give a tactile
 press, cards animate in, and hitting a new PR triggers a quick confetti
 burst. Respects `prefers-reduced-motion` if your device has that turned on.
 
+## Three new features
+
+**Live Workout Mode** — "🏋️ Start Workout Mode" on Today (when a session is
+scheduled) opens a distraction-free, full-screen, one-exercise-at-a-time
+view with large tap targets and a built-in rest timer. Your phone's screen
+is kept awake for the whole session using the browser's Wake Lock API, so
+it won't lock between sets — this only works once the app is added to your
+home screen and on iOS 16.4+. Exiting early keeps whatever you've entered
+in memory for that session; finishing saves exactly the same way the
+regular Today tab does.
+
+**Trophy Case** — Progress tab. Nine unlockable badges (first session, week
+streaks, session counts, PRs, reaching Advanced tier on a lift, trying 3+
+themes) computed live from your actual data — no separate tracking to
+maintain, they just reflect where you already are.
+
+**Friendly Competition** — Home tab, once there are 2+ profiles. A simple
+side-by-side of sessions logged this calendar month, with a 🏆 next to
+whoever's ahead. Meant to be lighthearted, not a real leaderboard.
+
+## Sabrina theme + scrollable theme picker
+
+Fixed the theme swatches spilling off the screen — they scroll
+horizontally now instead of overflowing. Also added a 9th theme, **Sabrina**
+— a glam/coquette look (blush pink, cherry red, gold, extra-rounded
+corners, a bow on the wordmark, dashed "frilly" card borders). It's a name
+and a vibe, not built from any real person's actual photos or likeness.
+
 ## Critical fix: AI key was being auto-revoked by Google (read this first)
 
 **What was happening:** the AI key sync feature stored your raw Gemini key

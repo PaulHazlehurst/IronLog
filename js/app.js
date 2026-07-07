@@ -21,6 +21,8 @@ function toast(msg) {
 }
 
 function fireConfetti() {
+  const theme = document.documentElement.dataset.theme;
+  if (theme === 'sabrina') { fireFalling('sabrina-pr'); return; }
   const colors = ['#4C8DFF', '#F0559C', '#2FD4C0', '#FFA94D', '#8B7CF6', '#4ADE80'];
   const count = 24;
   for (let i = 0; i < count; i++) {
@@ -148,13 +150,18 @@ function renderProfilePanel() {
   };
   const swatchWrap = $('#themeSwatches');
   if (swatchWrap) {
-    const swatchColors = { iron: '#4C8DFF', pink: '#F0559C', night: '#7B8794', sunset: '#FF6B4A', neon: '#B14CFF', forest: '#5EBF63', holiday: '#E0483F', winter: '#6FC3E8' };
+    const swatchColors = { iron: '#4C8DFF', pink: '#F0559C', night: '#7B8794', sunset: '#FF6B4A', neon: '#B14CFF', forest: '#5EBF63', holiday: '#E0483F', winter: '#6FC3E8', sabrina: '#E63950' };
     THEMES.forEach(t => {
       const sw = document.createElement('div');
       sw.className = 'theme-swatch' + (settings.theme === t ? ' active' : '');
       sw.style.background = swatchColors[t];
       sw.title = t.charAt(0).toUpperCase() + t.slice(1);
-      sw.onclick = () => { Storage.saveSettings({ theme: t }); applyTheme(); renderProfilePanel(); };
+      sw.onclick = () => {
+        const tried = [...new Set([...(settings.themesTried || []), t])];
+        Storage.saveSettings({ theme: t, themesTried: tried });
+        applyTheme();
+        renderProfilePanel();
+      };
       swatchWrap.appendChild(sw);
     });
   }
@@ -314,6 +321,39 @@ function resizeImageFile(file, maxWidth = 480, quality = 0.7) {
   });
 }
 
+function renderCompetitionCardHTML(activeName) {
+  const profiles = getAllProfilesRaw();
+  const names = Object.keys(profiles);
+  if (names.length < 2) return '';
+
+  const now = new Date();
+  const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const rows = names.map(name => {
+    const logs = profiles[name].logs || [];
+    const streak = Consistency.currentStreakWeeks(logs);
+    const sessionsThisMonth = Consistency.sessionDates(logs).filter(d => d.startsWith(monthKey)).length;
+    const color = profiles[name].settings?.tagColor || 'var(--accent)';
+    return { name, streak, sessionsThisMonth, color };
+  });
+  const maxSessions = Math.max(...rows.map(r => r.sessionsThisMonth));
+
+  return `
+    <div class="card">
+      <h3>This month</h3>
+      <div class="competition-rows">
+        ${rows.map(r => `
+          <div class="competition-row">
+            <span class="post-avatar" style="background:${r.color};">${r.name[0].toUpperCase()}</span>
+            <span class="competition-name">${r.name}${r.name === activeName ? ' (you)' : ''}</span>
+            <span class="competition-sessions">${r.sessionsThisMonth} session${r.sessionsThisMonth === 1 ? '' : 's'}</span>
+            ${r.sessionsThisMonth === maxSessions && maxSessions > 0 ? '<span title="Leading this month">🏆</span>' : ''}
+          </div>
+        `).join('')}
+      </div>
+      <p class="helper-text">Friendly count only — sessions logged this calendar month.</p>
+    </div>`;
+}
+
 function renderTogetherCardHTML(specialDate) {
   if (!specialDate) {
     return `
@@ -350,6 +390,7 @@ function renderHomeTab() {
     <div class="card" style="text-align:center;">
       <div class="streak-stat" style="margin:0 auto;"><div class="num">${jointStreak}</div><div class="lbl">Week${jointStreak === 1 ? '' : 's'} trained together</div></div>
     </div>` : ''}
+    ${renderCompetitionCardHTML(activeName)}
     <div class="card">
       <h3>Say something</h3>
       <textarea id="postComposer" rows="2" placeholder="Leave a note for the household…" style="resize:vertical;"></textarea>
@@ -485,7 +526,8 @@ function renderPostCard(p, activeName) {
 
 function fireFalling(kind) {
   const symbolSets = {
-    rose: ['🌹'], flowers: ['💐', '🌷', '🌼', '🌸'], heart: ['❤️', '💕', '💖']
+    rose: ['🌹'], flowers: ['💐', '🌷', '🌼', '🌸'], heart: ['❤️', '💕', '💖'],
+    'sabrina-pr': ['🎀', '⭐', '💗', '✨']
   };
   const symbols = symbolSets[kind] || ['🌸'];
   const count = 22;
@@ -962,7 +1004,10 @@ function renderTodayTab() {
       </div>
     </div>
     <div id="todayExercises"></div>
-    <button class="btn btn-primary" id="saveSessionBtn" style="margin-top:10px;">Save today's session</button>
+    <div class="row" style="margin-top:10px;">
+      <button class="btn btn-primary" id="saveSessionBtn">Save today's session</button>
+      <button class="btn" id="startWorkoutModeBtn" style="display:none;">🏋️ Start Workout Mode</button>
+    </div>
   `;
 
   $('#missedBtn').onclick = () => {
@@ -979,6 +1024,8 @@ function renderTodayTab() {
     $('#saveSessionBtn').style.display = 'none';
     return;
   }
+  $('#startWorkoutModeBtn').style.display = 'inline-block';
+  $('#startWorkoutModeBtn').onclick = () => enterWorkoutMode(exercises, templateDay, upcomingType, logs, settings);
 
   exercises.forEach(ex => {
     const exLogs = logsForExercise(ex.id, logs);
@@ -1064,35 +1111,148 @@ function renderTodayTab() {
   });
 
   $('#saveSessionBtn').onclick = () => {
-    const entry = { date: today, day: templateDay, exercises: [] };
-    let prCount = 0;
-    $all('.card[data-exercise-id]', list).forEach(card => {
-      const exId = card.dataset.exerciseId;
-      const ex = exercises.find(e => e.id === exId);
-      const sets = $all('.set-row:not(.set-header)', card).map(row => ({
+    finalizeSession(templateDay, exercises, logs, (exId) => {
+      const card = list.querySelector(`.card[data-exercise-id="${exId}"]`);
+      return $all('.set-row:not(.set-header)', card).map(row => ({
         weight: Number(row.querySelector('.set-weight').value) || 0,
         reps: Number(row.querySelector('.set-reps').value) || 0,
         rpe: Number(row.querySelector('.set-rpe').value) || 8
       }));
-      const priorBest = bestOneRmEver(exId, logs).oneRm;
-      const newTop = Progression.topSetOf({ sets });
-      if (newTop.oneRm > priorBest && priorBest > 0) prCount++;
-      entry.exercises.push({ exerciseId: exId, name: ex.name, muscle: ex.muscle, sets });
     });
-    Storage.addLog(entry);
-    const { name: activeName } = Profiles.getActive();
-    const settings = Storage.getSettings();
-    const prLine = prCount > 0 ? ` (${prCount} new PR${prCount > 1 ? 's' : ''} 🎉)` : '';
-    Storage.addPost({
-      type: 'workout_complete',
-      authorProfile: activeName,
-      authorColor: settings.tagColor,
-      text: `completed ${templateDay}'s workout${prLine}`
-    });
-    toast(prCount > 0
-      ? `Session saved. <span class="pr-toast-badge">${prCount} New PR${prCount > 1 ? 's' : ''}!</span>`
-      : "Session saved — next week's targets will update from this.");
-    if (prCount > 0) fireConfetti();
+    renderTodayTab();
+  };
+}
+
+// Shared by the normal Today-tab save button and Live Workout Mode's finish
+// button — getSetsForExercise(exerciseId) returns that exercise's logged sets.
+function finalizeSession(templateDay, exercises, logs, getSetsForExercise) {
+  const entry = { date: isoDate(), day: templateDay, exercises: [] };
+  let prCount = 0;
+  exercises.forEach(ex => {
+    const sets = getSetsForExercise(ex.id) || [];
+    const priorBest = bestOneRmEver(ex.id, logs).oneRm;
+    const newTop = Progression.topSetOf({ sets });
+    if (newTop.oneRm > priorBest && priorBest > 0) prCount++;
+    entry.exercises.push({ exerciseId: ex.id, name: ex.name, muscle: ex.muscle, sets });
+  });
+  Storage.addLog(entry);
+  const { name: activeName } = Profiles.getActive();
+  const settings = Storage.getSettings();
+  const prLine = prCount > 0 ? ` (${prCount} new PR${prCount > 1 ? 's' : ''} 🎉)` : '';
+  Storage.addPost({
+    type: 'workout_complete',
+    authorProfile: activeName,
+    authorColor: settings.tagColor,
+    text: `completed ${templateDay}'s workout${prLine}`
+  });
+  toast(prCount > 0
+    ? `Session saved. <span class="pr-toast-badge">${prCount} New PR${prCount > 1 ? 's' : ''}!</span>`
+    : "Session saved — next week's targets will update from this.");
+  if (prCount > 0) fireConfetti();
+  return { prCount };
+}
+
+/* ---------------- LIVE WORKOUT MODE ---------------- */
+let workoutMode = { idx: 0, exercises: [], templateDay: '', setsCache: {} };
+let wakeLockSentinel = null;
+
+async function requestWakeLock() {
+  try {
+    if ('wakeLock' in navigator) wakeLockSentinel = await navigator.wakeLock.request('screen');
+  } catch (e) { console.error('Wake lock request failed', e); }
+}
+function releaseWakeLock() {
+  if (wakeLockSentinel) { wakeLockSentinel.release().catch(() => {}); wakeLockSentinel = null; }
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && $('#workoutModeOverlay')) requestWakeLock();
+});
+
+function enterWorkoutMode(exercises, templateDay, upcomingType, logs, settings) {
+  workoutMode = { idx: 0, exercises, templateDay, setsCache: {} };
+  const overlay = document.createElement('div');
+  overlay.id = 'workoutModeOverlay';
+  overlay.className = 'workout-mode-overlay';
+  document.body.appendChild(overlay);
+  requestWakeLock();
+  renderWorkoutModeScreen(upcomingType, logs, settings);
+}
+
+function exitWorkoutMode() {
+  releaseWakeLock();
+  const overlay = $('#workoutModeOverlay');
+  if (overlay) overlay.remove();
+}
+
+function saveWorkoutModeCurrentSets(exId) {
+  const setsWrap = $('#wmSetsLog');
+  if (!setsWrap) return;
+  workoutMode.setsCache[exId] = $all('.set-row:not(.set-header)', setsWrap).map(row => ({
+    weight: Number(row.querySelector('.set-weight').value) || 0,
+    reps: Number(row.querySelector('.set-reps').value) || 0,
+    rpe: Number(row.querySelector('.set-rpe').value) || 8
+  }));
+}
+
+function renderWorkoutModeScreen(upcomingType, logs, settings) {
+  const overlay = $('#workoutModeOverlay');
+  if (!overlay) return;
+  const ex = workoutMode.exercises[workoutMode.idx];
+  const exLogs = logsForExercise(ex.id, logs);
+  const rx = Progression.nextPrescription(ex, exLogs, upcomingType);
+  const restSecs = Progression.suggestedRestSeconds(ex.repLow, ex.type);
+  const isLast = workoutMode.idx === workoutMode.exercises.length - 1;
+
+  overlay.innerHTML = `
+    <div class="wm-header">
+      <button class="btn btn-sm" id="wmExitBtn">✕ Exit</button>
+      <div class="wm-progress">${workoutMode.idx + 1} / ${workoutMode.exercises.length}</div>
+    </div>
+    <div class="wm-body">
+      <h2 class="wm-exercise-name">${ex.name}</h2>
+      <div class="exercise-meta" style="text-align:center;">${ex.muscle}</div>
+      <div class="rx-box ${upcomingType !== 'train' ? upcomingType : ''}" style="margin:16px auto;max-width:380px;text-align:center;">
+        Target: <strong>${rx.sets} × ${rx.reps} @ ${fmtWeight(rx.weight, ex.unit)}</strong><br>${rx.note}
+      </div>
+      <div class="sets-log" id="wmSetsLog" style="max-width:420px;margin:0 auto;"></div>
+      <div class="row" style="justify-content:center;margin-top:12px;">
+        <button class="btn btn-sm" id="wmAddSetBtn">+ Add set</button>
+        <button class="btn btn-sm" id="wmRestBtn">Start rest timer</button>
+      </div>
+      <div id="wmRestSlot" style="text-align:center;"></div>
+    </div>
+    <div class="wm-nav">
+      <button class="btn" id="wmPrevBtn" ${workoutMode.idx === 0 ? 'disabled' : ''}>← Prev</button>
+      ${isLast
+        ? `<button class="btn btn-primary" id="wmFinishBtn">Finish workout 🎉</button>`
+        : `<button class="btn btn-primary" id="wmNextBtn">Next →</button>`}
+    </div>
+  `;
+
+  const setsWrap = $('#wmSetsLog');
+  const cached = workoutMode.setsCache[ex.id];
+  if (cached && cached.length) {
+    resetSetsContainer(setsWrap, ex.unit);
+    cached.forEach(s => addSetRow(setsWrap, s.weight, s.reps, ex.unit, s.rpe));
+  } else {
+    for (let i = 0; i < rx.sets; i++) addSetRow(setsWrap, rx.weight, rx.reps, ex.unit);
+  }
+
+  $('#wmExitBtn').onclick = () => {
+    saveWorkoutModeCurrentSets(ex.id);
+    if (confirm('Exit Workout Mode? Nothing logged so far is saved yet — you can jump back into the regular Today tab and save from there, or return to Workout Mode later this session.')) exitWorkoutMode();
+  };
+  $('#wmAddSetBtn').onclick = () => addSetRow(setsWrap, rx.weight, rx.reps, ex.unit);
+  $('#wmRestBtn').onclick = () => startRestTimer($('#wmRestSlot'), restSecs, settings.restTimerSound);
+  const prevBtn = $('#wmPrevBtn');
+  if (prevBtn && workoutMode.idx > 0) prevBtn.onclick = () => { saveWorkoutModeCurrentSets(ex.id); workoutMode.idx--; renderWorkoutModeScreen(upcomingType, logs, settings); };
+  const nextBtn = $('#wmNextBtn');
+  if (nextBtn) nextBtn.onclick = () => { saveWorkoutModeCurrentSets(ex.id); workoutMode.idx++; renderWorkoutModeScreen(upcomingType, logs, settings); };
+  const finishBtn = $('#wmFinishBtn');
+  if (finishBtn) finishBtn.onclick = () => {
+    saveWorkoutModeCurrentSets(ex.id);
+    finalizeSession(workoutMode.templateDay, workoutMode.exercises, logs, (exId) => workoutMode.setsCache[exId]);
+    exitWorkoutMode();
     renderTodayTab();
   };
 }
@@ -1210,6 +1370,53 @@ function renderRecoveryTab() {
 }
 
 /* ---------------- PROGRESS TAB ---------------- */
+function countAllTimePRs(logs) {
+  const bestByExercise = {};
+  let prCount = 0;
+  const sorted = [...logs].sort((a, b) => new Date(a.date) - new Date(b.date));
+  sorted.forEach(l => {
+    (l.exercises || []).forEach(e => {
+      const top = Progression.topSetOf(e);
+      const prior = bestByExercise[e.exerciseId] || 0;
+      if (prior > 0 && top.oneRm > prior) prCount++;
+      if (top.oneRm > prior) bestByExercise[e.exerciseId] = top.oneRm;
+    });
+  });
+  return prCount;
+}
+
+function hasAdvancedTier(plan, logs, settings) {
+  return Standards.allLifts().some(lift => {
+    const taggedIds = Object.values(plan.days).flat().filter(e => e.standardLift === lift).map(e => e.id);
+    let best = 0;
+    logs.forEach(l => (l.exercises || []).forEach(e => {
+      if (taggedIds.includes(e.exerciseId)) (e.sets || []).forEach(s => { if (s.weight > best) best = s.weight; });
+    }));
+    const manual = settings.manualLifts?.[lift] || 0;
+    const lifted = best || manual;
+    if (!lifted) return false;
+    const result = Standards.tierFor(lift, settings.gender, settings.bodyweight, lifted);
+    return result.tier === 'Advanced' || result.tier === 'Elite';
+  });
+}
+
+function computeBadges(logs, plan, settings) {
+  const total = Consistency.totalSessions(logs);
+  const streak = Consistency.currentStreakWeeks(logs);
+  const prCount = countAllTimePRs(logs);
+  return [
+    { icon: '🎯', label: 'First Rep', unlocked: total >= 1 },
+    { icon: '🔥', label: 'On a Roll', unlocked: streak >= 3, hint: '3-week streak' },
+    { icon: '🌋', label: 'Unstoppable', unlocked: streak >= 8, hint: '8-week streak' },
+    { icon: '💯', label: 'Century', unlocked: total >= 10, hint: '10 sessions' },
+    { icon: '🏋️', label: 'Iron Regular', unlocked: total >= 50, hint: '50 sessions' },
+    { icon: '🥇', label: 'New Max', unlocked: prCount >= 1, hint: 'Any PR' },
+    { icon: '⚡', label: 'Serial PR Setter', unlocked: prCount >= 5, hint: '5 PRs' },
+    { icon: '📈', label: 'Advanced Tier', unlocked: hasAdvancedTier(plan, logs, settings), hint: 'Advanced+ on any lift' },
+    { icon: '🎨', label: 'Explorer', unlocked: (settings.themesTried || []).length >= 3, hint: 'Try 3 themes' }
+  ];
+}
+
 function renderProgressTab() {
   const logs = Storage.getLogs();
   const plan = Storage.getPlan();
@@ -1229,12 +1436,29 @@ function renderProgressTab() {
       </div>
     </div>
     <div class="card">
+      <h3>Trophy case</h3>
+      <div class="badge-grid" id="badgeGrid"></div>
+    </div>
+    <div class="card">
       <h3>Exercise trend</h3>
       <div class="exercise-picker" id="exercisePicker"></div>
       <div id="progressChart"></div>
       <div id="progressPR" class="helper-text"></div>
     </div>
   `;
+
+  const badges = computeBadges(logs, plan, settings);
+  const badgeGrid = $('#badgeGrid');
+  badges.forEach(b => {
+    const tile = document.createElement('div');
+    tile.className = 'badge-tile' + (b.unlocked ? ' unlocked' : '');
+    tile.innerHTML = `
+      <div class="badge-icon">${b.icon}</div>
+      <div class="badge-label">${b.label}</div>
+      ${b.hint ? `<div class="badge-hint">${b.hint}</div>` : ''}
+    `;
+    badgeGrid.appendChild(tile);
+  });
 
   const exercises = allPlanExercises();
   if (exercises.length === 0) {
