@@ -115,15 +115,62 @@ Respond with ONLY valid JSON, no markdown fences, no commentary, matching exactl
 
   async reviewPlan(planSummary) {
     if (!AI.isConfigured()) {
-      return { text: 'Turn on AI in Settings and add a free Gemini key for a written, prioritized summary on top of the checks above.', source: 'offline' };
+      return { ok: false, message: 'Turn on AI in Settings and add a free Gemini key for prioritized, actionable suggestions on top of the checks above.' };
     }
+    const muscleList = MUSCLES.join(', ');
+    const dayList = DAYS.join(', ');
+    const prompt = `You are an experienced strength coach reviewing a lifter's weekly training plan. Base every suggestion strictly on well-established, mainstream resistance-training science — progressive overload, training specificity, recovery/volume landmarks (MEV/MAV/MRV), periodization, and exercise variety within a rep range. Do not invent claims, cite fad techniques, or suggest anything you can't ground in one of those principles. If the plan is already reasonable, say so and suggest few or no changes rather than inventing issues.
+
+Here is the plan and a list of automatically-detected flags:
+
+${planSummary}
+
+Respond with ONLY valid JSON, no markdown fences, no commentary, matching exactly this shape:
+{"summary":"1-2 plain-language sentences on overall plan quality","suggestions":[{"action":"remove","day":"Monday","exerciseName":"Exact existing exercise name","reason":"One concise sentence naming the principle and why"},{"action":"add","day":"Tuesday","newExercise":{"name":"Exercise name","muscle":"Back","type":"compound","lowerBody":false,"sets":3,"repLow":8,"repHigh":12,"currentWeight":45},"reason":"..."},{"action":"adjust","day":"Wednesday","exerciseName":"Exact existing exercise name","changes":{"sets":4,"repLow":6,"repHigh":10},"reason":"..."}]}
+Valid "action" values: "remove", "add", "adjust". "day" must be exactly one of: ${dayList}. "muscle" (for add) must be exactly one of: ${muscleList}. "exerciseName" for remove/adjust must exactly match an exercise name that appears in the plan above. Only include fields that are changing inside "changes" for adjust. Limit to at most 5 suggestions, prioritized by importance. Use an empty array if you have no changes to suggest.`;
+
     try {
-      const prompt = `You are an experienced, practical strength coach. Here is a lifter's weekly training plan and a list of automatically-detected flags:\n\n${planSummary}\n\nGive concise, prioritized, practical feedback, focused on the most important issues first. Where a flag points to a real problem, explicitly recommend which specific exercise(s) to remove and which to add or swap in instead (name real exercises), not just general advice. Plain language, no fluff, no disclaimers, under 170 words total.`;
       const text = await AI.callGemini(prompt);
-      return { text, source: 'ai' };
+      const cleaned = text.replace(/```json|```/g, '').trim();
+      const parsed = JSON.parse(cleaned);
+      const validDays = new Set(DAYS);
+      const suggestions = (Array.isArray(parsed.suggestions) ? parsed.suggestions : [])
+        .filter(s => s && ['remove', 'add', 'adjust'].includes(s.action) && validDays.has(s.day))
+        .slice(0, 5)
+        .map((s, i) => {
+          const base = { id: `sugg-${i}`, action: s.action, day: s.day, reason: String(s.reason || '').slice(0, 220), status: 'pending' };
+          if (s.action === 'add') {
+            const ex = s.newExercise || {};
+            if (!ex.name || !MUSCLES.includes(ex.muscle)) return null;
+            base.newExercise = {
+              name: String(ex.name).slice(0, 60),
+              muscle: ex.muscle,
+              type: ex.type === 'isolation' ? 'isolation' : 'compound',
+              lowerBody: !!ex.lowerBody,
+              sets: Math.max(1, Math.min(8, Number(ex.sets) || 3)),
+              repLow: Math.max(1, Math.min(30, Number(ex.repLow) || 8)),
+              repHigh: Math.max(1, Math.min(30, Number(ex.repHigh) || 12)),
+              currentWeight: Math.max(0, Number(ex.currentWeight) || 45)
+            };
+          } else {
+            if (!s.exerciseName) return null;
+            base.exerciseName = String(s.exerciseName).slice(0, 60);
+            if (s.action === 'adjust') {
+              const c = s.changes || {};
+              base.changes = {};
+              if (c.sets !== undefined) base.changes.sets = Math.max(1, Math.min(8, Number(c.sets) || 3));
+              if (c.repLow !== undefined) base.changes.repLow = Math.max(1, Math.min(30, Number(c.repLow) || 8));
+              if (c.repHigh !== undefined) base.changes.repHigh = Math.max(1, Math.min(30, Number(c.repHigh) || 12));
+              if (Object.keys(base.changes).length === 0) return null;
+            }
+          }
+          return base;
+        })
+        .filter(Boolean);
+      return { ok: true, summary: String(parsed.summary || '').slice(0, 400), suggestions };
     } catch (e) {
       console.error(e);
-      return { text: 'AI review failed — the checks above still stand on their own.', source: 'offline' };
+      return { ok: false, message: 'AI review failed — the checks above still stand on their own.' };
     }
   },
 

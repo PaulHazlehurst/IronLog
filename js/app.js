@@ -364,6 +364,7 @@ function renderPlanTab() {
   `;
   $('#openBuilderBtn').onclick = () => renderPlanBuilderForm();
   $('#reviewPlanBtn').onclick = () => runPlanReview(plan);
+  if (reviewState.findings) renderReviewResults(false);
 
   const dayTabs = $('#planDayTabs');
   DAYS.forEach(d => {
@@ -536,16 +537,111 @@ function renderBuilderPreview(container, generatedPlan, unit) {
   $('#discardBuilderPlanBtn').onclick = () => { container.innerHTML = ''; };
 }
 
+let reviewState = { findings: null, summary: '', suggestions: [] };
+
 function runPlanReview(plan) {
-  const resultsEl = $('#planReviewResults');
-  const findings = PlanReview.analyze(plan);
-  resultsEl.innerHTML = PlanReview.renderHTML(findings) + `<div class="ai-review-slot"></div>`;
-  const aiSlot = resultsEl.querySelector('.ai-review-slot');
-  aiSlot.innerHTML = `<div class="helper-text">Loading AI summary…</div>`;
-  const summary = PlanReview.toPromptSummary(plan, findings);
-  AI.reviewPlan(summary).then(res => {
-    aiSlot.innerHTML = `<div class="ai-tip"><span class="tag">${res.source === 'ai' ? 'AI summary' : 'Note'}</span>${res.text}</div>`;
+  reviewState.findings = PlanReview.analyze(plan);
+  reviewState.summary = '';
+  reviewState.suggestions = [];
+  renderReviewResults(true);
+  const summaryText = PlanReview.toPromptSummary(plan, reviewState.findings);
+  AI.reviewPlan(summaryText).then(res => {
+    if (res.ok) {
+      reviewState.summary = res.summary;
+      reviewState.suggestions = res.suggestions;
+    } else {
+      reviewState.summary = res.message;
+      reviewState.suggestions = [];
+    }
+    renderReviewResults(false);
   });
+}
+
+function renderReviewResults(loading) {
+  const resultsEl = $('#planReviewResults');
+  if (!resultsEl || !reviewState.findings) return;
+  resultsEl.innerHTML = PlanReview.renderHTML(reviewState.findings) + `<div id="aiReviewSlot"></div>`;
+  const slot = $('#aiReviewSlot');
+  if (loading) {
+    slot.innerHTML = `<p class="helper-text">Checking against training science…</p>`;
+    return;
+  }
+  if (reviewState.summary) {
+    slot.innerHTML = `<div class="ai-tip"><span class="tag">AI summary</span>${escapeHtml(reviewState.summary)}</div>`;
+  }
+  const listWrap = document.createElement('div');
+  listWrap.id = 'suggestionList';
+  slot.appendChild(listWrap);
+  reviewState.suggestions.forEach(s => listWrap.appendChild(renderSuggestionCard(s)));
+}
+
+function renderSuggestionCard(s) {
+  const card = document.createElement('div');
+  card.className = 'card suggestion-card';
+  const badgeClass = s.action === 'remove' ? 'sugg-remove' : s.action === 'add' ? 'sugg-add' : 'sugg-adjust';
+  const badgeLabel = s.action === 'remove' ? 'Remove' : s.action === 'add' ? 'Add' : 'Adjust';
+  let title = '';
+  if (s.action === 'add') title = `${s.newExercise.name} — ${s.day}`;
+  else if (s.action === 'remove') title = `${s.exerciseName} — ${s.day}`;
+  else title = `${s.exerciseName} — ${s.day} (${Object.entries(s.changes).map(([k, v]) => `${k}: ${v}`).join(', ')})`;
+
+  card.innerHTML = `
+    <div class="row" style="justify-content:space-between;align-items:flex-start;">
+      <div>
+        <span class="pill ${badgeClass}">${badgeLabel}</span>
+        <div class="exercise-name" style="margin-top:6px;">${escapeHtml(title)}</div>
+        <div class="exercise-meta">${escapeHtml(s.reason)}</div>
+      </div>
+    </div>
+    <div class="row" style="margin-top:10px;flex:0 0 auto;" id="suggActions-${s.id}"></div>
+  `;
+  const actions = card.querySelector(`#suggActions-${s.id}`);
+  if (s.status === 'applied') {
+    actions.innerHTML = `<span class="helper-text" style="color:var(--success);">✓ Applied</span>`;
+  } else if (s.status === 'dismissed') {
+    actions.innerHTML = `<span class="helper-text">Dismissed</span>`;
+  } else {
+    const acceptBtn = document.createElement('button');
+    acceptBtn.className = 'btn btn-sm btn-primary';
+    acceptBtn.textContent = 'Accept';
+    acceptBtn.onclick = () => {
+      const result = applySuggestion(s);
+      if (result.ok) {
+        s.status = 'applied';
+        renderPlanTab();
+        toast('Applied to your plan.');
+      } else {
+        toast(result.message);
+      }
+    };
+    const dismissBtn = document.createElement('button');
+    dismissBtn.className = 'btn btn-sm';
+    dismissBtn.textContent = 'Dismiss';
+    dismissBtn.onclick = () => { s.status = 'dismissed'; renderReviewResults(false); };
+    actions.appendChild(acceptBtn);
+    actions.appendChild(dismissBtn);
+  }
+  return card;
+}
+
+function applySuggestion(s) {
+  const plan = Storage.getPlan();
+  const list = plan.days[s.day] || (plan.days[s.day] = []);
+  if (s.action === 'add') {
+    const settings = Storage.getSettings();
+    list.push({ id: uid(), standardLift: null, unit: settings.units, ...s.newExercise });
+    Storage.savePlan(plan);
+    return { ok: true };
+  }
+  const idx = list.findIndex(e => e.name.trim().toLowerCase() === s.exerciseName.trim().toLowerCase());
+  if (idx === -1) return { ok: false, message: `Couldn't find "${s.exerciseName}" on ${s.day} anymore — it may already have changed.` };
+  if (s.action === 'remove') {
+    list.splice(idx, 1);
+  } else if (s.action === 'adjust') {
+    Object.assign(list[idx], s.changes);
+  }
+  Storage.savePlan(plan);
+  return { ok: true };
 }
 
 function renderAddExerciseForm(existing) {
