@@ -70,7 +70,7 @@ body {
   color: var(--text);
   font-family: var(--font-body);
   line-height: 1.5;
-  padding-bottom: 80px; /* room for mobile bottom nav */
+  padding-bottom: 92px; /* room for the mobile bottom nav */
   overflow-x: hidden;
   max-width: 100vw;
   transition: background-color 0.2s ease, color 0.2s ease;
@@ -119,6 +119,9 @@ svg text {
   gap: 12px;
   flex-wrap: wrap;
   padding: 14px 20px;
+  padding-top: calc(14px + env(safe-area-inset-top, 0px));
+  padding-left: calc(20px + env(safe-area-inset-left, 0px));
+  padding-right: calc(20px + env(safe-area-inset-right, 0px));
   border-bottom: 1px solid var(--border);
   position: sticky;
   top: 0;
@@ -203,12 +206,12 @@ svg text {
     border-top: 1px solid var(--border);
     border-bottom: none;
     justify-content: space-around;
-    padding: 6px 2px calc(6px + env(safe-area-inset-bottom, 0px));
+    padding: 10px 2px calc(10px + env(safe-area-inset-bottom, 0px));
     z-index: 20;
   }
   .tab-btn {
-    padding: 8px 2px;
-    font-size: 10px;
+    padding: 10px 2px;
+    font-size: 10.5px;
     flex: 1;
     min-width: 0;
     text-align: center;
@@ -216,7 +219,7 @@ svg text {
     text-overflow: ellipsis;
   }
   .tab-panel { padding: 14px; }
-  .app-header { padding: 12px 14px; }
+  .app-header { padding: 12px 14px; padding-top: calc(12px + env(safe-area-inset-top, 0px)); }
   .app-header h1 { font-size: 17px; }
 }
 
@@ -398,7 +401,7 @@ input, select, textarea {
 .toast.show { opacity: 1; }
 
 @media (max-width: 720px) {
-  .toast { bottom: 80px; }
+  .toast { bottom: 96px; }
 }
 
 .helper-text { font-size: 12px; color: var(--text-dim); margin-top: 6px; }
@@ -608,7 +611,8 @@ input, select, textarea {
 
 .profile-panel {
   position: fixed;
-  top: 62px; right: 12px;
+  top: calc(62px + env(safe-area-inset-top, 0px));
+  right: calc(12px + env(safe-area-inset-right, 0px));
   width: min(320px, calc(100vw - 24px));
   background: var(--surface);
   border: 1px solid var(--border);
@@ -659,3 +663,42 @@ input, select, textarea {
 .builder-preview-day { margin-bottom: 10px; }
 .builder-preview-day .bp-day-title { font-family: var(--font-display); font-size: 13px; margin-bottom: 4px; }
 .builder-preview-ex { font-size: 12.5px; color: var(--text-dim); padding: 2px 0; }
+
+/* ============================================================
+   HOME — comment hub / activity feed
+   ============================================================ */
+textarea {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 11px;
+  font-size: 16px;
+  width: 100%;
+  font-family: var(--font-body);
+}
+
+.post-card { padding: 14px 16px; }
+.post-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.post-avatar {
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-display);
+  font-size: 11px; font-weight: 700;
+  flex-shrink: 0;
+}
+.post-author { font-family: var(--font-display); font-size: 13px; }
+.post-time { font-size: 11px; color: var(--text-dim); margin-left: auto; font-family: var(--font-mono); }
+.post-body { font-size: 14px; margin-bottom: 8px; overflow-wrap: anywhere; }
+.post-reactions { display: flex; gap: 6px; flex-wrap: wrap; }
+.reaction-chip {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 13px;
+  cursor: pointer;
+  font-family: var(--font-mono);
+}
+.reaction-chip.active { border-color: var(--accent); background: var(--surface); }

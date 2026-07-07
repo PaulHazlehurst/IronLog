@@ -3,7 +3,7 @@
    ============================================================ */
 
 let state = {
-  activeTab: 'today',
+  activeTab: 'home',
   planDay: weekdayName(isoDate()),
   progressExerciseId: null,
   restTimers: {}
@@ -59,10 +59,16 @@ function renderProfilePanel() {
       <button class="btn btn-sm" id="pushPlanBtn">Push</button>
     </div>` : ''}
     ${names.length > 0 ? `<h3>Theme</h3><div class="theme-swatches" id="themeSwatches"></div>` : ''}
+    ${names.length > 0 ? `<h3 style="margin-top:12px;">Your color (used on Home posts)</h3><div class="theme-swatches" id="tagColorSwatches"></div>` : ''}
   `;
   const listWrap = $('#profileListWrap');
   names.forEach(n => {
+    const row = document.createElement('div');
+    row.style.display = 'flex';
+    row.style.gap = '6px';
+    row.style.alignItems = 'center';
     const b = document.createElement('button');
+    b.style.flex = '1';
     b.className = n === activeName ? 'active' : '';
     b.innerHTML = `<span class="profile-avatar" style="width:20px;height:20px;font-size:9px;">${n[0].toUpperCase()}</span> ${n}`;
     b.onclick = () => {
@@ -73,7 +79,28 @@ function renderProfilePanel() {
       renderActiveTab();
       toast(`Switched to ${n}.`);
     };
-    listWrap.appendChild(b);
+    row.appendChild(b);
+    if (names.length > 1) {
+      const del = document.createElement('button');
+      del.className = 'btn btn-sm btn-danger';
+      del.textContent = '×';
+      del.title = `Delete ${n}`;
+      del.style.flex = '0 0 auto';
+      del.onclick = () => {
+        if (!confirm(`Delete profile "${n}"? This permanently erases its plan and logged history. This cannot be undone.`)) return;
+        const wasActive = n === activeName;
+        const ok = Profiles.delete(n);
+        if (ok) {
+          toast(`Deleted "${n}".`);
+          if (wasActive) { applyTheme(); renderProfileButton(); renderActiveTab(); }
+          renderProfilePanel();
+        } else {
+          toast("Couldn't delete — at least one profile has to remain.");
+        }
+      };
+      row.appendChild(del);
+    }
+    listWrap.appendChild(row);
   });
   $('#createProfileBtn').onclick = () => {
     const name = $('#newProfileName').value.trim();
@@ -107,6 +134,16 @@ function renderProfilePanel() {
       sw.title = t.charAt(0).toUpperCase() + t.slice(1);
       sw.onclick = () => { Storage.saveSettings({ theme: t }); applyTheme(); renderProfilePanel(); };
       swatchWrap.appendChild(sw);
+    });
+  }
+  const tagWrap = $('#tagColorSwatches');
+  if (tagWrap) {
+    TAG_COLORS.forEach(c => {
+      const sw = document.createElement('div');
+      sw.className = 'theme-swatch' + (settings.tagColor === c ? ' active' : '');
+      sw.style.background = c;
+      sw.onclick = () => { Storage.saveSettings({ tagColor: c }); renderProfilePanel(); };
+      tagWrap.appendChild(sw);
     });
   }
 }
@@ -147,6 +184,7 @@ function switchTab(tab) {
 }
 
 function renderActiveTab() {
+  if (state.activeTab === 'home') renderHomeTab();
   if (state.activeTab === 'plan') renderPlanTab();
   if (state.activeTab === 'today') renderTodayTab();
   if (state.activeTab === 'recovery') renderRecoveryTab();
@@ -177,6 +215,122 @@ function renderWeekDial() {
 }
 
 /* ---------------- PLAN TAB ---------------- */
+const POST_EMOJIS = ['💪', '🔥', '❤️', '👏'];
+
+function timeAgo(iso) {
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const mins = Math.round(diffMs / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.round(hrs / 24);
+  return `${days}d ago`;
+}
+
+function notifPermissionButtonHTML() {
+  if (!('Notification' in window)) return '';
+  if (Notification.permission === 'granted') return `<p class="helper-text">Notifications are on for this device.</p>`;
+  if (Notification.permission === 'denied') return `<p class="helper-text">Notifications are blocked for this site in your browser settings.</p>`;
+  return `<button class="btn btn-sm" id="enableNotifBtn">Enable notifications on this device</button>`;
+}
+
+function renderHomeTab() {
+  const panel = $('#panel-home');
+  const posts = Storage.getPosts();
+  const { name: activeName } = Profiles.getActive();
+  const jointStreak = Storage.jointStreakWeeks();
+
+  panel.innerHTML = `
+    ${jointStreak > 0 ? `
+    <div class="card" style="text-align:center;">
+      <div class="streak-stat" style="margin:0 auto;"><div class="num">${jointStreak}</div><div class="lbl">Week${jointStreak === 1 ? '' : 's'} trained together</div></div>
+    </div>` : ''}
+    <div class="card">
+      <h3>Say something</h3>
+      <textarea id="postComposer" rows="2" placeholder="Leave a note for the household…" style="resize:vertical;"></textarea>
+      <div class="row" style="margin-top:8px;">
+        <button class="btn btn-primary btn-sm" id="postBtn">Post</button>
+      </div>
+      ${notifPermissionButtonHTML()}
+    </div>
+    <div id="postsFeed"></div>
+  `;
+
+  $('#postBtn').onclick = () => {
+    const text = $('#postComposer').value.trim();
+    if (!text) return;
+    const settings = Storage.getSettings();
+    Storage.addPost({ type: 'comment', authorProfile: activeName, authorColor: settings.tagColor, text });
+    renderHomeTab();
+  };
+
+  const notifBtn = $('#enableNotifBtn');
+  if (notifBtn) notifBtn.onclick = async () => {
+    const perm = await Notification.requestPermission();
+    toast(perm === 'granted' ? 'Notifications enabled on this device.' : 'Notifications not enabled.');
+    renderHomeTab();
+  };
+
+  const feed = $('#postsFeed');
+  if (posts.length === 0) {
+    feed.innerHTML = `<div class="empty-state">No activity yet — post something, or complete a workout to share it here.</div>`;
+  } else {
+    feed.innerHTML = '';
+    posts.forEach(p => feed.appendChild(renderPostCard(p, activeName)));
+  }
+
+  Storage.setLastSeenPostsAt(new Date().toISOString());
+}
+
+function renderPostCard(p, activeName) {
+  const card = document.createElement('div');
+  card.className = 'card post-card';
+  const isWorkout = p.type === 'workout_complete';
+  card.innerHTML = `
+    <div class="post-head">
+      <span class="post-avatar" style="background:${p.authorColor || 'var(--accent)'};">${(p.authorProfile || '?')[0].toUpperCase()}</span>
+      <span class="post-author">${p.authorProfile || 'Someone'}</span>
+      <span class="post-time">${timeAgo(p.createdAt)}</span>
+    </div>
+    <div class="post-body">${isWorkout ? '🏋️ ' : ''}${escapeHtml(p.text)}</div>
+    <div class="post-reactions" id="reactions-${p.id}"></div>
+  `;
+  const reactWrap = card.querySelector('.post-reactions');
+  POST_EMOJIS.forEach(emoji => {
+    const users = (p.reactions && p.reactions[emoji]) || [];
+    const btn = document.createElement('button');
+    btn.className = 'reaction-chip' + (users.includes(activeName) ? ' active' : '');
+    btn.textContent = `${emoji}${users.length ? ' ' + users.length : ''}`;
+    btn.onclick = () => { Storage.toggleReaction(p.id, emoji, activeName); renderHomeTab(); };
+    reactWrap.appendChild(btn);
+  });
+  return card;
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+function checkForNewActivity() {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  const lastSeen = Storage.getLastSeenPostsAt();
+  const posts = Storage.getPosts();
+  const { name: activeName } = Profiles.getActive();
+  const fresh = posts.filter(p => p.authorProfile !== activeName && (!lastSeen || new Date(p.createdAt) > new Date(lastSeen)));
+  if (fresh.length === 0) return;
+  const body = fresh.length === 1
+    ? `${fresh[0].authorProfile}: ${fresh[0].text}`
+    : `${fresh.length} new updates from your household`;
+  if (navigator.serviceWorker && navigator.serviceWorker.ready) {
+    navigator.serviceWorker.ready.then(reg => reg.showNotification('Iron Log', { body, icon: 'icons/icon-192.png', badge: 'icons/icon-192.png' }));
+  } else {
+    new Notification('Iron Log', { body });
+  }
+}
+
 function renderPlanTab() {
   const plan = Storage.getPlan();
   const panel = $('#panel-plan');
@@ -615,6 +769,15 @@ function renderTodayTab() {
       entry.exercises.push({ exerciseId: exId, name: ex.name, muscle: ex.muscle, sets });
     });
     Storage.addLog(entry);
+    const { name: activeName } = Profiles.getActive();
+    const settings = Storage.getSettings();
+    const prLine = prCount > 0 ? ` (${prCount} new PR${prCount > 1 ? 's' : ''} 🎉)` : '';
+    Storage.addPost({
+      type: 'workout_complete',
+      authorProfile: activeName,
+      authorColor: settings.tagColor,
+      text: `completed ${templateDay}'s workout${prLine}`
+    });
     toast(prCount > 0
       ? `Session saved. <span class="pr-toast-badge">${prCount} New PR${prCount > 1 ? 's' : ''}!</span>`
       : "Session saved — next week's targets will update from this.");
@@ -977,6 +1140,7 @@ function renderSettingsTab() {
     $('#syncStatus').textContent = 'Pulling…';
     const res = await Sync.pull();
     toast(res.message);
+    if (res.ok) checkForNewActivity();
     renderActiveTab();
   };
   $('#pushNowBtn').onclick = async () => {
@@ -1041,8 +1205,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     } else {
       toast('Checking GitHub for updates…');
       const res = await Sync.pull();
-      if (res.ok) { toast('Synced from GitHub.'); applyTheme(); renderProfileButton(); }
+      if (res.ok) { toast('Synced from GitHub.'); applyTheme(); renderProfileButton(); checkForNewActivity(); }
     }
   }
-  if (Storage.hasAnyProfile()) switchTab('today');
+  if (Storage.hasAnyProfile()) switchTab('home');
 });

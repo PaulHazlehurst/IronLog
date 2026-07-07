@@ -60,11 +60,12 @@ function getLastLocalChangeAt() {
 }
 
 function emptyPlan() { return { days: Object.fromEntries(DAYS.map(d => [d, []])) }; }
+const TAG_COLORS = ['#4C8DFF', '#F0559C', '#2FD4C0', '#FFA94D', '#8B7CF6', '#4ADE80'];
 function defaultProfileSettings() {
   return {
     units: 'lb', bodyweight: 180, gender: 'male',
     barWeight: 45, availablePlates: [45, 35, 25, 10, 5, 2.5],
-    restTimerSound: true, manualLifts: {}, theme: 'iron'
+    restTimerSound: true, manualLifts: {}, theme: 'iron', tagColor: null
   };
 }
 function defaultProfile() {
@@ -76,10 +77,10 @@ function defaultProfile() {
     settings: defaultProfileSettings()
   };
 }
-function defaultShared() { return { aiProvider: 'gemini', aiApiKey: '', aiEnabled: false }; }
-function defaultDevice() { return { githubToken: '', githubGistId: '', githubLastSync: null, activeProfile: '' }; }
+function defaultShared() { return { aiProvider: 'gemini', aiApiKey: '', aiEnabled: false, posts: [] }; }
+function defaultDevice() { return { githubToken: '', githubGistId: '', githubLastSync: null, activeProfile: '', lastSeenPostsAt: null }; }
 
-const PROFILE_SETTING_KEYS = ['units', 'bodyweight', 'gender', 'barWeight', 'availablePlates', 'restTimerSound', 'manualLifts', 'theme'];
+const PROFILE_SETTING_KEYS = ['units', 'bodyweight', 'gender', 'barWeight', 'availablePlates', 'restTimerSound', 'manualLifts', 'theme', 'tagColor'];
 const SHARED_SETTING_KEYS = ['aiProvider', 'aiApiKey', 'aiEnabled'];
 const DEVICE_SETTING_KEYS = ['githubToken', 'githubGistId', 'githubLastSync'];
 
@@ -105,6 +106,7 @@ function migrateLegacyIfNeeded() {
   const legacyOverrides = loadJSON(DB.LEGACY_WEEK_OVERRIDES, null);
   if (legacyOverrides) profile.weekOverrides = legacyOverrides;
   PROFILE_SETTING_KEYS.forEach(k => { if (legacySettings[k] !== undefined) profile.settings[k] = legacySettings[k]; });
+  if (!profile.settings.tagColor) profile.settings.tagColor = TAG_COLORS[0];
   profiles[name] = profile;
   saveAllProfilesRaw(profiles);
 
@@ -142,6 +144,8 @@ const Profiles = {
     if (profiles[name]) return false;
     const p = defaultProfile();
     if (theme) p.settings.theme = theme;
+    const usedColors = Object.values(profiles).map(pr => pr.settings?.tagColor).filter(Boolean);
+    p.settings.tagColor = TAG_COLORS.find(c => !usedColors.includes(c)) || TAG_COLORS[Object.keys(profiles).length % TAG_COLORS.length];
     profiles[name] = p;
     saveAllProfilesRaw(profiles);
     Profiles.setActive(name);
@@ -306,6 +310,56 @@ const Storage = {
   wipeAll() {
     [DB.PROFILES, DB.SHARED, DB.DEVICE, DB.LEGACY_PLAN, DB.LEGACY_LOGS, DB.LEGACY_SETTINGS, DB.LEGACY_CYCLE, DB.LEGACY_WEEK_OVERRIDES, LAST_CHANGE_KEY]
       .forEach(k => localStorage.removeItem(k));
+  },
+
+  /* ---------------- SHARED COMMENT/ACTIVITY HUB ---------------- */
+  getPosts() {
+    const shared = { ...defaultShared(), ...loadJSON(DB.SHARED, {}) };
+    return (shared.posts || []).slice().sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  },
+  addPost(post) {
+    const shared = { ...defaultShared(), ...loadJSON(DB.SHARED, {}) };
+    shared.posts = [...(shared.posts || []), { id: uid(), createdAt: new Date().toISOString(), reactions: {}, ...post }];
+    // Keep the feed from growing forever — trim to the most recent 300.
+    if (shared.posts.length > 300) shared.posts = shared.posts.slice(shared.posts.length - 300);
+    saveJSON(DB.SHARED, shared);
+    notifyChanged();
+  },
+  toggleReaction(postId, emoji, profileName) {
+    const shared = { ...defaultShared(), ...loadJSON(DB.SHARED, {}) };
+    const post = (shared.posts || []).find(p => p.id === postId);
+    if (!post) return;
+    post.reactions = post.reactions || {};
+    post.reactions[emoji] = post.reactions[emoji] || [];
+    const idx = post.reactions[emoji].indexOf(profileName);
+    if (idx >= 0) post.reactions[emoji].splice(idx, 1);
+    else post.reactions[emoji].push(profileName);
+    saveJSON(DB.SHARED, shared);
+    notifyChanged();
+  },
+  getLastSeenPostsAt() { return getDeviceRaw().lastSeenPostsAt; },
+  setLastSeenPostsAt(iso) { const d = getDeviceRaw(); d.lastSeenPostsAt = iso; saveDeviceRaw(d); },
+
+  // Both/all profiles logged at least one session in the current Mon-Sun week.
+  jointStreakWeeks() {
+    const profiles = getAllProfilesRaw();
+    const names = Object.keys(profiles);
+    if (names.length < 2) return 0;
+    let streak = 0;
+    let cursor = mondayOf(isoDate());
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      const allTrained = names.every(n => {
+        const logs = profiles[n].logs || [];
+        return logs.some(l => mondayOf(l.date) === cursor);
+      });
+      if (!allTrained) break;
+      streak++;
+      const d = new Date(cursor + 'T00:00:00');
+      d.setDate(d.getDate() - 7);
+      cursor = isoDate(d);
+    }
+    return streak;
   }
 };
 

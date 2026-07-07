@@ -36,6 +36,39 @@ Use **Settings → Export backup** regularly (a `.json` file downloads to your
 device) and **Import backup** to restore or move it to another
 browser/device.
 
+## Home hub, notifications & profile colors
+
+**Home** is now the first tab — a shared comment feed for everyone using the
+app. Post a note, and it syncs to every profile/device like everything else.
+Completing a workout on the Today tab automatically posts an activity item
+("completed Push Day 💪") so your partner sees it without you doing anything.
+Tap the emoji under any post to react.
+
+Each profile picks a **tag color** (profile panel, alongside Theme) used to
+color their name/avatar on posts, so it's easy to tell at a glance who said
+or did what.
+
+**Notifications — read this part.** Tapping "Enable notifications" lets the
+app show a notification when it detects new activity from your partner —
+this fires reliably whenever the app is opened, reopened, or sitting in the
+background with the tab still alive. It will **not** reliably wake up a
+fully closed/locked phone the instant something happens — that needs genuine
+push notifications, which require a small always-on relay to trigger
+delivery (even a free one, e.g. a Cloudflare Worker) since a static site
+has no way to push to a phone that isn't asking. If instant-while-locked
+notifications matter enough to you, that's a buildable follow-up — just ask.
+
+On iPhone specifically: Notification permission and delivery only works
+reliably once the app is **installed to the home screen** (see the PWA
+section below) and on iOS 16.4+; it's unreliable from a regular Safari tab.
+
+## Layout fixes
+
+- The header now pads around the iPhone status bar / notch / Dynamic Island
+  instead of sitting underneath it.
+- The bottom tab bar is bigger, with safe-area padding for phones with a
+  home indicator.
+
 ## Profiles
 
 Tap the profile button (top right) to create or switch profiles — each
