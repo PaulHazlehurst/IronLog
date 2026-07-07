@@ -107,6 +107,62 @@ Small motion throughout: tabs fade in on switch, buttons give a tactile
 press, cards animate in, and hitting a new PR triggers a quick confetti
 burst. Respects `prefers-reduced-motion` if your device has that turned on.
 
+## Critical fix: sync data safety (read this if you use sync)
+
+**What happened:** connecting a brand-new device to GitHub sync for the
+first time used to check "does this device have unsynced local changes?" —
+and since a device that has *never* synced always looks like it does, first
+connections always **pushed** local data over the shared store instead of
+**pulling** it. If the connecting device only had a little (or no) local
+data, this could overwrite everything already shared.
+
+**The fix:** the whole sync architecture changed. Each profile now lives in
+its own file inside the Gist (not one shared blob), and a device only ever
+writes the file for the profile it currently has active, plus a merged
+shared file for AI settings, the special date, and the Home feed (comments
+are merged by ID, not overwritten). A device can never again write over a
+profile it isn't using. First-time connections now always try to pull
+first, since that's now always safe.
+
+**Recovering lost data:** GitHub Gists keep full revision history.
+1. Go to your Gist on github.com (Settings → your GitHub profile → Gists,
+   or check your token's associated account).
+2. Click the **Revisions** tab.
+3. Find the version from just before the overwrite, open the file, copy its
+   entire contents.
+4. In the app: **Settings → Emergency restore** → paste it in → Restore.
+5. Push to GitHub from the sync card above to make the recovery permanent
+   on the shared store.
+
+## AI calls failing after the sync incident
+
+If AI stopped working around the same time, it's very likely the same
+incident wiped the shared AI key (it lived in the same overwritten blob).
+Re-enter your Gemini key in Settings, then use the new **Test connection**
+button next to it — it makes one real call and tells you exactly whether it
+worked or the precise error if not, rather than guessing.
+
+## Relationship features
+
+**Photos** — the composer on Home now has an "Attach photo" button.
+Photos are resized/compressed client-side before posting to keep the synced
+data small — this is a shared JSON store, not real file storage, so keep
+photos occasional rather than a full photo album.
+
+**Gifts** — 🌹 Send a rose, 💐 Send flowers, ❤️ Send love, right under the
+composer. Sending one posts it to Home immediately *and* triggers a
+falling-petals/hearts animation on your own screen. When your partner next
+opens the app (or Home specifically) and it's unseen, the same animation
+plays for them, plus a notification if they've enabled those.
+
+**Ambient background** — profile panel → Background effect: Off, Snow,
+Petals, or Hearts — a subtle, continuous particle effect behind the app
+while you have it open. Personal per profile, not shared.
+
+**Special date** — Home tab, top card. Set an anniversary or any date once
+and it shows a running day count from then on (shared across the
+household, syncs like everything else).
+
 ## Plan review — now actionable
 
 "Review my week" still runs the same free, rule-based checks (volume,

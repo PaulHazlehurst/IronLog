@@ -66,7 +66,8 @@ function defaultProfileSettings() {
   return {
     units: 'lb', bodyweight: 180, gender: 'male',
     barWeight: 45, availablePlates: [45, 35, 25, 10, 5, 2.5],
-    restTimerSound: true, manualLifts: {}, theme: 'iron', tagColor: null, fontStyle: 'modern'
+    restTimerSound: true, manualLifts: {}, theme: 'iron', tagColor: null, fontStyle: 'modern',
+    ambientEffect: 'none'
   };
 }
 function defaultProfile() {
@@ -78,11 +79,11 @@ function defaultProfile() {
     settings: defaultProfileSettings()
   };
 }
-function defaultShared() { return { aiProvider: 'gemini', aiApiKey: '', aiEnabled: false, posts: [] }; }
+function defaultShared() { return { aiProvider: 'gemini', aiApiKey: '', aiEnabled: false, posts: [], specialDate: null }; }
 function defaultDevice() { return { githubToken: '', githubGistId: '', githubLastSync: null, activeProfile: '', lastSeenPostsAt: null }; }
 
-const PROFILE_SETTING_KEYS = ['units', 'bodyweight', 'gender', 'barWeight', 'availablePlates', 'restTimerSound', 'manualLifts', 'theme', 'tagColor', 'fontStyle'];
-const SHARED_SETTING_KEYS = ['aiProvider', 'aiApiKey', 'aiEnabled'];
+const PROFILE_SETTING_KEYS = ['units', 'bodyweight', 'gender', 'barWeight', 'availablePlates', 'restTimerSound', 'manualLifts', 'theme', 'tagColor', 'fontStyle', 'ambientEffect'];
+const SHARED_SETTING_KEYS = ['aiProvider', 'aiApiKey', 'aiEnabled', 'specialDate'];
 const DEVICE_SETTING_KEYS = ['githubToken', 'githubGistId', 'githubLastSync'];
 
 /* ---------------- PROFILE MANAGEMENT ---------------- */
@@ -178,12 +179,31 @@ const Profiles = {
   },
 
   // Copies the active profile's plan (exercise template only, not logs)
-  // into another profile.
-  pushPlanTo(targetName) {
-    const profiles = getAllProfilesRaw();
+  // into another profile. If GitHub sync is connected, fetches that
+  // profile's current file fresh first and pushes only that one file back —
+  // it never touches any other profile's data, local cache or not.
+  async pushPlanTo(targetName) {
     const activeName = Profiles.activeName();
-    if (!profiles[activeName] || !profiles[targetName] || activeName === targetName) return false;
-    profiles[targetName].plan = JSON.parse(JSON.stringify(profiles[activeName].plan));
+    if (activeName === targetName) return false;
+    const activeData = getAllProfilesRaw()[activeName];
+    if (!activeData) return false;
+    const device = getDeviceRaw();
+
+    if (device.githubToken && device.githubGistId) {
+      const freshTarget = await Sync.fetchProfileFresh(targetName);
+      const profiles = getAllProfilesRaw();
+      const base = freshTarget || profiles[targetName];
+      if (!base) return false;
+      base.plan = JSON.parse(JSON.stringify(activeData.plan));
+      profiles[targetName] = base;
+      saveAllProfilesRaw(profiles);
+      const res = await Sync.pushSingleProfile(targetName);
+      return res.ok;
+    }
+
+    const profiles = getAllProfilesRaw();
+    if (!profiles[targetName]) return false;
+    profiles[targetName].plan = JSON.parse(JSON.stringify(activeData.plan));
     saveAllProfilesRaw(profiles);
     notifyChanged();
     return true;
@@ -305,6 +325,35 @@ const Storage = {
     } catch (e) {
       console.error('Import failed', e);
       return false;
+    }
+  },
+
+  // Emergency recovery: paste raw JSON found in a GitHub Gist revision
+  // (Settings > danger zone) after data was accidentally overwritten.
+  // Accepts either the old combined-bundle shape or a single profile file.
+  restoreFromRawBackup(jsonText) {
+    try {
+      const parsed = JSON.parse(jsonText);
+      if (parsed.profiles) {
+        const merged = { ...getAllProfilesRaw(), ...parsed.profiles };
+        saveAllProfilesRaw(merged);
+        if (parsed.shared) {
+          const mergedShared = { ...defaultShared(), ...loadJSON(DB.SHARED, {}), ...parsed.shared };
+          saveJSON(DB.SHARED, mergedShared);
+        }
+        notifyChanged();
+        return { ok: true, count: Object.keys(parsed.profiles).length };
+      }
+      if (parsed.name && parsed.data) {
+        const profiles = getAllProfilesRaw();
+        profiles[parsed.name] = parsed.data;
+        saveAllProfilesRaw(profiles);
+        notifyChanged();
+        return { ok: true, count: 1 };
+      }
+      return { ok: false, message: "Didn't recognize that JSON — make sure you copied the whole file content." };
+    } catch (e) {
+      return { ok: false, message: 'Invalid JSON — check you copied the whole thing, including the outer { }.' };
     }
   },
 

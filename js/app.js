@@ -42,6 +42,7 @@ function applyTheme() {
   const s = Storage.getSettings();
   document.documentElement.dataset.theme = s.theme || 'iron';
   document.documentElement.dataset.font = s.fontStyle || 'modern';
+  applyAmbientEffect();
 }
 
 function renderProfileButton() {
@@ -77,6 +78,7 @@ function renderProfilePanel() {
     </div>` : ''}
     ${names.length > 0 ? `<h3>Theme</h3><div class="theme-swatches" id="themeSwatches"></div>` : ''}
     ${names.length > 0 ? `<h3 style="margin-top:12px;">Font</h3><div class="builder-chip-group" id="fontSwatches"></div>` : ''}
+    ${names.length > 0 ? `<h3 style="margin-top:12px;">Background effect</h3><div class="builder-chip-group" id="ambientSwatches"></div>` : ''}
     ${names.length > 0 ? `<h3 style="margin-top:12px;">Your color (used on Home posts)</h3><div class="theme-swatches" id="tagColorSwatches"></div>` : ''}
   `;
   const listWrap = $('#profileListWrap');
@@ -136,10 +138,12 @@ function renderProfilePanel() {
     }
   };
   const pushBtn = $('#pushPlanBtn');
-  if (pushBtn) pushBtn.onclick = () => {
+  if (pushBtn) pushBtn.onclick = async () => {
     const target = $('#pushTargetSelect').value;
     if (!confirm(`Push your current plan to ${target}? This replaces their existing plan.`)) return;
-    const ok = Profiles.pushPlanTo(target);
+    pushBtn.disabled = true; pushBtn.textContent = 'Pushing…';
+    const ok = await Profiles.pushPlanTo(target);
+    pushBtn.disabled = false; pushBtn.textContent = 'Push';
     toast(ok ? `Pushed your plan to ${target}.` : 'Push failed.');
   };
   const swatchWrap = $('#themeSwatches');
@@ -176,6 +180,18 @@ function renderProfilePanel() {
       sw.style.background = c;
       sw.onclick = () => { Storage.saveSettings({ tagColor: c }); renderProfilePanel(); };
       tagWrap.appendChild(sw);
+    });
+  }
+  const ambientWrap = $('#ambientSwatches');
+  if (ambientWrap) {
+    const options = [{ key: 'none', label: 'Off' }, { key: 'snow', label: '❄️ Snow' }, { key: 'petals', label: '🌸 Petals' }, { key: 'hearts', label: '❤️ Hearts' }];
+    options.forEach(o => {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'builder-chip' + ((settings.ambientEffect || 'none') === o.key ? ' selected' : '');
+      chip.textContent = o.label;
+      chip.onclick = () => { Storage.saveSettings({ ambientEffect: o.key }); applyTheme(); renderProfilePanel(); };
+      ambientWrap.appendChild(chip);
     });
   }
 }
@@ -267,13 +283,67 @@ function notifPermissionButtonHTML() {
   return `<button class="btn btn-sm" id="enableNotifBtn">Enable notifications on this device</button>`;
 }
 
+let pendingPhotoDataUrl = null;
+const GIFT_TYPES = {
+  rose: { emoji: '🌹', label: 'Send a rose', defaultText: 'sent you a rose 🌹' },
+  flowers: { emoji: '💐', label: 'Send flowers', defaultText: 'sent you flowers 💐' },
+  heart: { emoji: '❤️', label: 'Send love', defaultText: 'sent you some love ❤️' }
+};
+
+function resizeImageFile(file, maxWidth = 480, quality = 0.7) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const scale = Math.min(1, maxWidth / img.width);
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = reject;
+      img.src = reader.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function renderTogetherCardHTML(specialDate) {
+  if (!specialDate) {
+    return `
+    <div class="card">
+      <h3>Special date</h3>
+      <p class="helper-text">Set an anniversary or start date to see a running count on Home.</p>
+      <div class="row">
+        <input type="date" id="specialDateInput">
+        <button class="btn btn-sm btn-primary" id="saveSpecialDateBtn">Save</button>
+      </div>
+    </div>`;
+  }
+  const days = Math.floor((new Date(isoDate() + 'T00:00:00') - new Date(specialDate + 'T00:00:00')) / (24 * 3600 * 1000));
+  return `
+    <div class="card" style="text-align:center;">
+      <div class="streak-stat" style="margin:0 auto;"><div class="num">${Math.abs(days)}</div><div class="lbl">Day${Math.abs(days) === 1 ? '' : 's'} ${days >= 0 ? 'together' : 'to go'}</div></div>
+      <button class="btn btn-sm" id="editSpecialDateBtn" style="margin-top:8px;">Edit date</button>
+    </div>`;
+}
+
 function renderHomeTab() {
   const panel = $('#panel-home');
   const posts = Storage.getPosts();
   const { name: activeName } = Profiles.getActive();
   const jointStreak = Storage.jointStreakWeeks();
 
+  // Check for unseen gifts from someone else before we mark everything read.
+  const lastSeen = Storage.getLastSeenPostsAt();
+  const unseenGift = posts.find(p => p.giftType && p.authorProfile !== activeName && (!lastSeen || new Date(p.createdAt) > new Date(lastSeen)));
+
   panel.innerHTML = `
+    ${renderTogetherCardHTML(Storage.getSettings().specialDate)}
     ${jointStreak > 0 ? `
     <div class="card" style="text-align:center;">
       <div class="streak-stat" style="margin:0 auto;"><div class="num">${jointStreak}</div><div class="lbl">Week${jointStreak === 1 ? '' : 's'} trained together</div></div>
@@ -281,21 +351,79 @@ function renderHomeTab() {
     <div class="card">
       <h3>Say something</h3>
       <textarea id="postComposer" rows="2" placeholder="Leave a note for the household…" style="resize:vertical;"></textarea>
-      <div class="row" style="margin-top:8px;">
+      <div id="photoPreviewWrap"></div>
+      <div class="row" style="margin-top:8px;flex-wrap:wrap;">
+        <button class="btn btn-sm" id="attachPhotoBtn" type="button">📷 Attach photo</button>
         <button class="btn btn-primary btn-sm" id="postBtn">Post</button>
+      </div>
+      <input type="file" id="photoInput" accept="image/*" style="display:none;">
+      <div class="row" style="margin-top:10px;flex-wrap:wrap;">
+        ${Object.entries(GIFT_TYPES).map(([key, g]) => `<button class="btn btn-sm gift-btn" data-gift="${key}">${g.emoji} ${g.label}</button>`).join('')}
       </div>
       ${notifPermissionButtonHTML()}
     </div>
     <div id="postsFeed"></div>
   `;
 
-  $('#postBtn').onclick = () => {
-    const text = $('#postComposer').value.trim();
-    if (!text) return;
-    const settings = Storage.getSettings();
-    Storage.addPost({ type: 'comment', authorProfile: activeName, authorColor: settings.tagColor, text });
+  const saveSpecialBtn = $('#saveSpecialDateBtn');
+  if (saveSpecialBtn) saveSpecialBtn.onclick = () => {
+    const val = $('#specialDateInput').value;
+    if (!val) { toast('Pick a date first.'); return; }
+    Storage.saveSettings({ specialDate: val });
     renderHomeTab();
   };
+  const editSpecialBtn = $('#editSpecialDateBtn');
+  if (editSpecialBtn) editSpecialBtn.onclick = () => {
+    Storage.saveSettings({ specialDate: null });
+    renderHomeTab();
+  };
+
+  const renderPhotoPreview = () => {
+    const wrap = $('#photoPreviewWrap');
+    wrap.innerHTML = pendingPhotoDataUrl
+      ? `<div style="position:relative;display:inline-block;margin-top:8px;"><img src="${pendingPhotoDataUrl}" class="photo-preview-img"><button id="removePhotoBtn" class="btn btn-sm" style="position:absolute;top:4px;right:4px;">✕</button></div>`
+      : '';
+    const removeBtn = $('#removePhotoBtn');
+    if (removeBtn) removeBtn.onclick = () => { pendingPhotoDataUrl = null; renderPhotoPreview(); };
+  };
+  renderPhotoPreview();
+
+  $('#attachPhotoBtn').onclick = () => $('#photoInput').click();
+  $('#photoInput').onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      pendingPhotoDataUrl = await resizeImageFile(file);
+      renderPhotoPreview();
+    } catch (err) {
+      toast("Couldn't read that image — try a different photo.");
+    }
+  };
+
+  $('#postBtn').onclick = () => {
+    const text = $('#postComposer').value.trim();
+    if (!text && !pendingPhotoDataUrl) return;
+    const settings = Storage.getSettings();
+    Storage.addPost({ type: 'comment', authorProfile: activeName, authorColor: settings.tagColor, text, photoDataUrl: pendingPhotoDataUrl || null });
+    pendingPhotoDataUrl = null;
+    renderHomeTab();
+  };
+
+  $all('.gift-btn').forEach(btn => {
+    btn.onclick = () => {
+      const key = btn.dataset.gift;
+      const gift = GIFT_TYPES[key];
+      const settings = Storage.getSettings();
+      const customText = $('#postComposer').value.trim();
+      Storage.addPost({
+        type: 'gift', giftType: key, authorProfile: activeName, authorColor: settings.tagColor,
+        text: customText || gift.defaultText
+      });
+      fireFalling(key);
+      toast(`${gift.emoji} Sent!`);
+      renderHomeTab();
+    };
+  });
 
   const notifBtn = $('#enableNotifBtn');
   if (notifBtn) notifBtn.onclick = async () => {
@@ -312,20 +440,23 @@ function renderHomeTab() {
     posts.forEach(p => feed.appendChild(renderPostCard(p, activeName)));
   }
 
+  if (unseenGift) fireFalling(unseenGift.giftType);
   Storage.setLastSeenPostsAt(new Date().toISOString());
 }
 
 function renderPostCard(p, activeName) {
   const card = document.createElement('div');
-  card.className = 'card post-card';
   const isWorkout = p.type === 'workout_complete';
+  const isGift = p.type === 'gift';
+  card.className = 'card post-card' + (isGift ? ' gift-card' : '');
   card.innerHTML = `
     <div class="post-head">
       <span class="post-avatar" style="background:${p.authorColor || 'var(--accent)'};">${(p.authorProfile || '?')[0].toUpperCase()}</span>
       <span class="post-author">${p.authorProfile || 'Someone'}</span>
       <span class="post-time">${timeAgo(p.createdAt)}</span>
     </div>
-    <div class="post-body">${isWorkout ? '🏋️ ' : ''}${escapeHtml(p.text)}</div>
+    <div class="post-body">${isWorkout ? '🏋️ ' : ''}${isGift ? `${GIFT_TYPES[p.giftType]?.emoji || '🎁'} ` : ''}${escapeHtml(p.text)}</div>
+    ${p.photoDataUrl ? `<img src="${p.photoDataUrl}" class="post-photo">` : ''}
     <div class="post-reactions" id="reactions-${p.id}"></div>
   `;
   const reactWrap = card.querySelector('.post-reactions');
@@ -338,6 +469,46 @@ function renderPostCard(p, activeName) {
     reactWrap.appendChild(btn);
   });
   return card;
+}
+
+function fireFalling(kind) {
+  const symbolSets = {
+    rose: ['🌹'], flowers: ['💐', '🌷', '🌼', '🌸'], heart: ['❤️', '💕', '💖']
+  };
+  const symbols = symbolSets[kind] || ['🌸'];
+  const count = 22;
+  for (let i = 0; i < count; i++) {
+    const el = document.createElement('div');
+    el.className = 'falling-emoji';
+    el.textContent = symbols[Math.floor(Math.random() * symbols.length)];
+    el.style.left = `${Math.random() * 100}vw`;
+    el.style.animationDelay = `${Math.random() * 0.6}s`;
+    el.style.animationDuration = `${3 + Math.random() * 2}s`;
+    el.style.fontSize = `${20 + Math.random() * 16}px`;
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 6000);
+  }
+}
+
+let ambientInterval = null;
+function applyAmbientEffect() {
+  clearInterval(ambientInterval);
+  document.querySelectorAll('.ambient-particle').forEach(el => el.remove());
+  const s = Storage.getSettings();
+  const effect = s.ambientEffect || 'none';
+  if (effect === 'none') return;
+  const symbol = effect === 'snow' ? '❄️' : effect === 'petals' ? '🌸' : '❤️';
+  ambientInterval = setInterval(() => {
+    const el = document.createElement('div');
+    el.className = 'ambient-particle';
+    el.textContent = symbol;
+    el.style.left = `${Math.random() * 100}vw`;
+    el.style.animationDuration = `${8 + Math.random() * 6}s`;
+    el.style.fontSize = `${10 + Math.random() * 10}px`;
+    el.style.opacity = 0.4 + Math.random() * 0.3;
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 15000);
+  }, 900);
 }
 
 function escapeHtml(str) {
@@ -354,7 +525,7 @@ function checkForNewActivity() {
   const fresh = posts.filter(p => p.authorProfile !== activeName && (!lastSeen || new Date(p.createdAt) > new Date(lastSeen)));
   if (fresh.length === 0) return;
   const body = fresh.length === 1
-    ? `${fresh[0].authorProfile}: ${fresh[0].text}`
+    ? (fresh[0].giftType ? `${GIFT_TYPES[fresh[0].giftType]?.emoji || '🎁'} ${fresh[0].authorProfile} ${fresh[0].text}` : `${fresh[0].authorProfile}: ${fresh[0].text}`)
     : `${fresh.length} new updates from your household`;
   if (navigator.serviceWorker && navigator.serviceWorker.ready) {
     navigator.serviceWorker.ready.then(reg => reg.showNotification('Iron Log', { body, icon: 'icons/icon-192.png', badge: 'icons/icon-192.png' }));
@@ -1199,6 +1370,8 @@ function renderSettingsTab() {
         <div><label>Enable AI</label><select id="setAiEnabled"><option value="false" ${!s.aiEnabled?'selected':''}>Off</option><option value="true" ${s.aiEnabled?'selected':''}>On</option></select></div>
         <div><label>Gemini API key</label><input id="setAiKey" type="password" value="${s.aiApiKey||''}" placeholder="Paste your key"></div>
       </div>
+      <button class="btn btn-sm" id="testAiBtn" style="margin-top:8px;">Test connection</button>
+      <div id="aiTestResult"></div>
     </div>
     <div class="card">
       <h3>Cross-device sync (GitHub)</h3>
@@ -1224,6 +1397,12 @@ function renderSettingsTab() {
       <p class="helper-text">Exports only your currently active profile (${Profiles.activeName() || 'none selected'}). Importing adds it as a new profile rather than overwriting — handy for moving a profile to a fresh browser.</p>
     </div>
     <div class="card">
+      <h3>Emergency restore</h3>
+      <p class="helper-text">If sync data was ever accidentally overwritten: go to your Gist on github.com → click the <strong>Revisions</strong> tab → find the version from before the overwrite → open the file → copy its full contents → paste below.</p>
+      <textarea id="restoreTextarea" rows="4" placeholder="Paste the raw JSON from a gist revision here…"></textarea>
+      <button class="btn btn-sm" id="restoreBtn" style="margin-top:8px;">Restore from pasted data</button>
+    </div>
+    <div class="card">
       <h3>Danger zone</h3>
       <button class="btn btn-danger" id="wipeBtn">Erase all profiles &amp; data on this device</button>
     </div>
@@ -1234,6 +1413,25 @@ function renderSettingsTab() {
   $('#setBw').onchange = e => save(s => s.bodyweight = Number(e.target.value) || s.bodyweight);
   $('#setAiEnabled').onchange = e => save(s => s.aiEnabled = e.target.value === 'true');
   $('#setAiKey').onchange = e => save(s => s.aiApiKey = e.target.value.trim());
+  $('#testAiBtn').onclick = async () => {
+    const resultEl = $('#aiTestResult');
+    const btn = $('#testAiBtn');
+    btn.disabled = true; btn.textContent = 'Testing…';
+    resultEl.innerHTML = '';
+    if (!Storage.getSettings().aiEnabled) {
+      resultEl.innerHTML = `<p class="helper-text" style="color:var(--amber);">AI is set to Off — turn it on above first.</p>`;
+    } else if (!Storage.getSettings().aiApiKey) {
+      resultEl.innerHTML = `<p class="helper-text" style="color:var(--amber);">No key entered yet.</p>`;
+    } else {
+      try {
+        const text = await AI.callGemini("Reply with exactly one word: connected");
+        resultEl.innerHTML = `<p class="helper-text" style="color:var(--success);">✓ Working — Gemini replied: "${escapeHtml(text.slice(0,60))}"</p>`;
+      } catch (err) {
+        resultEl.innerHTML = `<p class="helper-text" style="color:var(--accent);">✗ Failed: ${escapeHtml(err.message)}</p>`;
+      }
+    }
+    btn.disabled = false; btn.textContent = 'Test connection';
+  };
   $('#setBar').onchange = e => save(s => s.barWeight = Number(e.target.value) || s.barWeight);
   $('#setPlates').onchange = e => save(s => s.availablePlates = e.target.value.split(',').map(v => Number(v.trim())).filter(Boolean).sort((a,b)=>b-a));
   $('#setRestSound').onchange = e => save(s => s.restTimerSound = e.target.value === 'true');
@@ -1249,18 +1447,19 @@ function renderSettingsTab() {
     if (!token) { toast('GitHub sync disconnected.'); renderSettingsTab(); return; }
     if (hadToken) { toast('Token updated.'); return; }
     toast('Connecting to GitHub…');
-    if (Sync.hasPendingLocalChanges()) {
-      const pushRes = await Sync.push();
-      toast(pushRes.ok ? 'Pushed your existing data to GitHub as the starting point.' : pushRes.message);
+    // First-time connection always tries to pull any existing shared data
+    // first — pulling is now safe (it merges rather than replaces), so this
+    // is the right default whether you're the first person connecting or
+    // joining someone who already set things up.
+    const pullRes = await Sync.pull();
+    if (pullRes.ok) {
+      toast('Synced with the shared store on GitHub.');
+      applyTheme();
+      renderProfileButton();
+      renderActiveTab();
     } else {
-      const pullRes = await Sync.pull();
-      if (pullRes.ok) {
-        toast('Found existing data — pulled it in.');
-        renderActiveTab();
-      } else {
-        const pushRes = await Sync.push();
-        toast(pushRes.ok ? 'Created new sync store on GitHub.' : pushRes.message);
-      }
+      const pushRes = await Sync.push();
+      toast(pushRes.ok ? 'No existing shared data found — created a new sync store with what you have.' : pushRes.message);
     }
     renderSettingsTab();
   };
@@ -1291,6 +1490,21 @@ function renderSettingsTab() {
       renderActiveTab();
     };
     reader.readAsText(file);
+  };
+  $('#restoreBtn').onclick = () => {
+    const text = $('#restoreTextarea').value.trim();
+    if (!text) { toast('Paste the JSON first.'); return; }
+    const result = Storage.restoreFromRawBackup(text);
+    if (result.ok) {
+      toast(`Restored ${result.count} profile${result.count === 1 ? '' : 's'}. Push to GitHub in the sync card above to make it official.`);
+      $('#restoreTextarea').value = '';
+      applyTheme();
+      renderProfileButton();
+      renderActiveTab();
+      renderSettingsTab();
+    } else {
+      toast(result.message);
+    }
   };
   $('#wipeBtn').onclick = () => {
     if (confirm('This erases every profile, plan, log, and setting on this device. This cannot be undone. Continue?')) {

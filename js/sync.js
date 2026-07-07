@@ -1,19 +1,23 @@
 /* ============================================================
    SYNC — cross-device sync via a private GitHub Gist
    ------------------------------------------------------------
-   Syncs ALL profiles plus the shared AI settings in one blob —
-   so either person can switch profiles on their own device, and
-   entering an AI key once makes it available to every profile on
-   every device synced to the same Gist. The GitHub token/gist id
-   themselves stay device-local (each device already needs its
-   own copy to unlock the store in the first place).
-   Last-write-wins: whichever device pushes most recently "wins"
-   if two devices are edited at the same time without syncing in
-   between — fine for a couple of trusted devices, not built for
-   true simultaneous multi-editor conflict resolution.
+   SAFETY MODEL: each profile lives in its OWN file inside the
+   Gist (profile__<slug>.json). A device only ever WRITES the
+   file for the profile it currently has active, plus the shared
+   file (AI settings + the Home feed, merged rather than
+   overwritten). It never writes another profile's file. That
+   means no device can ever stomp on someone else's profile data,
+   even by accident — the exact failure mode that happened before
+   this rewrite, where a first-time connection pushed one
+   person's near-empty local data over the whole shared store.
    ============================================================ */
 
-const GIST_FILENAME = 'iron-log-data.json';
+const SHARED_FILENAME = 'shared.json';
+const LEGACY_FILENAME = 'iron-log-data.json'; // old single-blob format, read-only for migration
+
+function slugForProfile(name) {
+  return 'profile__' + String(name).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 40) + '.json';
+}
 
 const Sync = {
   pushTimer: null,
@@ -27,50 +31,85 @@ const Sync = {
     };
   },
 
-  buildBundle() {
-    return {
-      version: 2,
-      updatedAt: new Date().toISOString(),
-      profiles: getAllProfilesRaw(),
-      shared: { ...defaultShared(), ...loadJSON(DB.SHARED, {}) }
-    };
-  },
-
   async findExistingGist(token) {
     const res = await fetch('https://api.github.com/gists?per_page=100', { headers: Sync.headers(token) });
     if (!res.ok) throw new Error(`GitHub responded ${res.status} listing gists`);
     const gists = await res.json();
-    return gists.find(g => g.files && g.files[GIST_FILENAME]) || null;
+    return gists.find(g => g.files && (g.files[SHARED_FILENAME] || g.files[LEGACY_FILENAME] ||
+      Object.keys(g.files).some(f => f.startsWith('profile__')))) || null;
+  },
+
+  async fetchGist(token, gistId) {
+    const res = await fetch(`https://api.github.com/gists/${gistId}`, { headers: Sync.headers(token) });
+    if (!res.ok) throw new Error(`GitHub responded ${res.status}`);
+    return res.json();
+  },
+
+  mergePosts(remotePosts, localPosts) {
+    const byId = new Map();
+    [...(remotePosts || []), ...(localPosts || [])].forEach(p => {
+      const existing = byId.get(p.id);
+      if (!existing) { byId.set(p.id, { ...p }); return; }
+      // Merge reactions from both copies of the same post.
+      const merged = { ...existing };
+      const allEmojis = new Set([...Object.keys(existing.reactions || {}), ...Object.keys(p.reactions || {})]);
+      merged.reactions = {};
+      allEmojis.forEach(emoji => {
+        merged.reactions[emoji] = [...new Set([...(existing.reactions?.[emoji] || []), ...(p.reactions?.[emoji] || [])])];
+      });
+      byId.set(p.id, merged);
+    });
+    return [...byId.values()].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)).slice(-300);
   },
 
   async push() {
     const device = getDeviceRaw();
     if (!device.githubToken) return { ok: false, message: 'No GitHub token set.' };
+    const activeName = Profiles.activeName();
+    if (!activeName) return { ok: false, message: 'No active profile to push.' };
     if (Sync.isBusy) return { ok: false, message: 'Sync already in progress.' };
     Sync.isBusy = true;
     try {
-      const content = JSON.stringify(Sync.buildBundle(), null, 2);
       let gistId = device.githubGistId;
       if (!gistId) {
         const existing = await Sync.findExistingGist(device.githubToken);
         gistId = existing?.id || null;
       }
+
+      // Merge shared.json (posts + AI settings) against whatever's live on
+      // GitHub right now, rather than blindly overwriting it — this is what
+      // stops two people's comments/reactions from clobbering each other.
+      let remoteShared = null;
+      if (gistId) {
+        const gist = await Sync.fetchGist(device.githubToken, gistId);
+        const sharedContent = gist.files?.[SHARED_FILENAME]?.content;
+        if (sharedContent) { try { remoteShared = JSON.parse(sharedContent); } catch (e) { /* ignore */ } }
+      }
+      const localShared = { ...defaultShared(), ...loadJSON(DB.SHARED, {}) };
+      const mergedShared = {
+        aiProvider: localShared.aiProvider || remoteShared?.aiProvider || 'gemini',
+        aiApiKey: localShared.aiApiKey || remoteShared?.aiApiKey || '',
+        aiEnabled: localShared.aiEnabled || remoteShared?.aiEnabled || false,
+        specialDate: localShared.specialDate || remoteShared?.specialDate || null,
+        posts: Sync.mergePosts(remoteShared?.posts, localShared.posts)
+      };
+      saveJSON(DB.SHARED, mergedShared); // keep local in sync with the merge too
+
+      const profiles = getAllProfilesRaw();
+      const files = {
+        [SHARED_FILENAME]: { content: JSON.stringify(mergedShared, null, 2) },
+        [slugForProfile(activeName)]: { content: JSON.stringify({ name: activeName, data: profiles[activeName] }, null, 2) }
+      };
+
       let res;
       if (gistId) {
         res = await fetch(`https://api.github.com/gists/${gistId}`, {
-          method: 'PATCH',
-          headers: Sync.headers(device.githubToken),
-          body: JSON.stringify({ files: { [GIST_FILENAME]: { content } } })
+          method: 'PATCH', headers: Sync.headers(device.githubToken), body: JSON.stringify({ files })
         });
       } else {
         res = await fetch('https://api.github.com/gists', {
-          method: 'POST',
-          headers: Sync.headers(device.githubToken),
-          body: JSON.stringify({
-            description: 'Iron Log workout data — managed by the app, safe to ignore.',
-            public: false,
-            files: { [GIST_FILENAME]: { content } }
-          })
+          method: 'POST', headers: Sync.headers(device.githubToken),
+          body: JSON.stringify({ description: 'Iron Log workout data — managed by the app, safe to ignore.', public: false, files })
         });
       }
       if (!res.ok) throw new Error(`GitHub responded ${res.status}`);
@@ -101,26 +140,43 @@ const Sync = {
       }
       if (!gistId) return { ok: false, message: 'No sync data found on GitHub yet — push from your other device first.' };
 
-      const res = await fetch(`https://api.github.com/gists/${gistId}`, { headers: Sync.headers(device.githubToken) });
-      if (!res.ok) throw new Error(`GitHub responded ${res.status}`);
-      const data = await res.json();
-      const content = data.files?.[GIST_FILENAME]?.content;
-      if (!content) return { ok: false, message: 'Found the sync gist but it was empty.' };
-      const bundle = JSON.parse(content);
-
+      const gist = await Sync.fetchGist(device.githubToken, gistId);
+      const files = gist.files || {};
       const currentActive = Profiles.activeName();
-      if (bundle.profiles) saveAllProfilesRaw(bundle.profiles);
-      if (bundle.shared) saveJSON(DB.SHARED, bundle.shared);
+
+      const profileFiles = Object.keys(files).filter(f => f.startsWith('profile__'));
+      if (profileFiles.length > 0) {
+        // Current, multi-file format — start from local so any profile that
+        // hasn't been pushed yet survives, then overlay the fresh remote
+        // copy for every profile that does exist on GitHub.
+        const merged = { ...getAllProfilesRaw() };
+        profileFiles.forEach(fname => {
+          try {
+            const parsed = JSON.parse(files[fname].content);
+            if (parsed?.name && parsed?.data) merged[parsed.name] = parsed.data;
+          } catch (e) { console.error('Skipping unreadable profile file', fname, e); }
+        });
+        saveAllProfilesRaw(merged);
+        const sharedContent = files[SHARED_FILENAME]?.content;
+        if (sharedContent) saveJSON(DB.SHARED, JSON.parse(sharedContent));
+      } else if (files[LEGACY_FILENAME]) {
+        // One-time read of the old single-blob format; next push migrates it forward.
+        const bundle = JSON.parse(files[LEGACY_FILENAME].content);
+        if (bundle.profiles) saveAllProfilesRaw(bundle.profiles);
+        if (bundle.shared) saveJSON(DB.SHARED, bundle.shared);
+      } else {
+        return { ok: false, message: 'Found the sync gist but it had no readable data.' };
+      }
 
       const d = getDeviceRaw();
       d.githubGistId = gistId;
       d.githubLastSync = new Date().toISOString();
-      // Keep this device on the same profile if it still exists after pulling.
-      if (currentActive && bundle.profiles && bundle.profiles[currentActive]) d.activeProfile = currentActive;
-      else if (bundle.profiles) d.activeProfile = Object.keys(bundle.profiles)[0] || '';
+      const profiles = getAllProfilesRaw();
+      if (currentActive && profiles[currentActive]) d.activeProfile = currentActive;
+      else d.activeProfile = Object.keys(profiles)[0] || '';
       saveDeviceRaw(d);
 
-      return { ok: true, message: `Pulled from GitHub (saved ${bundle.updatedAt ? new Date(bundle.updatedAt).toLocaleString() : 'earlier'}).` };
+      return { ok: true, message: 'Pulled the latest shared data from GitHub.' };
     } catch (e) {
       console.error(e);
       return { ok: false, message: 'Pull failed — ' + e.message };
@@ -129,9 +185,46 @@ const Sync = {
     }
   },
 
+  // Fetches one profile's file fresh from GitHub without touching anything
+  // else — used by "push my plan to" so that action only ever reads/writes
+  // the one profile it's actually targeting.
+  async fetchProfileFresh(profileName) {
+    const device = getDeviceRaw();
+    if (!device.githubToken || !device.githubGistId) return null;
+    try {
+      const gist = await Sync.fetchGist(device.githubToken, device.githubGistId);
+      const content = gist.files?.[slugForProfile(profileName)]?.content;
+      if (!content) return null;
+      const parsed = JSON.parse(content);
+      return parsed?.data || null;
+    } catch (e) {
+      console.error(e);
+      return null;
+    }
+  },
+
+  async pushSingleProfile(profileName) {
+    const device = getDeviceRaw();
+    if (!device.githubToken || !device.githubGistId) return { ok: false };
+    try {
+      const profiles = getAllProfilesRaw();
+      const res = await fetch(`https://api.github.com/gists/${device.githubGistId}`, {
+        method: 'PATCH',
+        headers: Sync.headers(device.githubToken),
+        body: JSON.stringify({ files: { [slugForProfile(profileName)]: { content: JSON.stringify({ name: profileName, data: profiles[profileName] }, null, 2) } } })
+      });
+      return { ok: res.ok };
+    } catch (e) {
+      console.error(e);
+      return { ok: false };
+    }
+  },
+
   // True if you've made local changes since the last successful push —
   // pulling now would silently overwrite them, so callers should push
-  // (or at least warn) instead of pulling blind.
+  // (or at least warn) instead of pulling blind. Only meaningful for
+  // reload/auto-sync — first-time connection uses a pull-first flow
+  // regardless of this, see app.js.
   hasPendingLocalChanges() {
     const device = getDeviceRaw();
     const lastChange = getLastLocalChangeAt();
