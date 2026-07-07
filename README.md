@@ -36,6 +36,27 @@ Use **Settings → Export backup** regularly (a `.json` file downloads to your
 device) and **Import backup** to restore or move it to another
 browser/device.
 
+## Installing it like an app (PWA)
+
+Iron Log is a Progressive Web App — it can live on your home screen with its
+own icon and open full-screen, no browser bar, and it keeps working if you
+briefly lose signal.
+
+**On iPhone:**
+1. Open your site's URL in **Safari** (this only works from Safari, not Chrome/other browsers on iOS).
+2. Tap the **Share** icon (square with an arrow) in the toolbar.
+3. Scroll down and tap **Add to Home Screen**.
+4. Tap **Add**.
+
+You'll get a real icon on your home screen that launches like any other app.
+Do this on both your phone and your girlfriend's phone (each person adds it
+once from their own Safari).
+
+**Updating:** since it's network-first, opening the app while online always
+pulls the latest version I ship — no reinstalling needed. If a device ever
+seems stuck on an old version, force-close the app and reopen it, or bump
+`CACHE_VERSION` in `sw.js` if you're troubleshooting yourself.
+
 ## Cross-device sync (GitHub Gist)
 
 Settings has a "Cross-device sync" card. Create a GitHub personal access
