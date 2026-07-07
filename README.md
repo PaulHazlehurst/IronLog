@@ -95,6 +95,18 @@ is technically visible to anyone with access to your synced data, so use one
 you're comfortable sharing within your household rather than a personal key
 tied to a paid account.
 
+## Themes, fonts & motion
+
+Six themes now (profile panel): Iron, Pink, Night, plus **Sunset** (warm
+coral/amber), **Neon** (purple/cyan synthwave), and **Forest** (calm green).
+Each profile also picks a **font style** — Modern (the default, Space
+Grotesk), Playful (rounded Baloo 2), or Classic (elegant Fraunces serif) —
+right next to the theme swatches.
+
+Small motion throughout: tabs fade in on switch, buttons give a tactile
+press, cards animate in, and hitting a new PR triggers a quick confetti
+burst. Respects `prefers-reduced-motion` if your device has that turned on.
+
 ## Plan review — now actionable
 
 "Review my week" still runs the same free, rule-based checks (volume,

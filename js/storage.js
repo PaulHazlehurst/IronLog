@@ -25,7 +25,8 @@ const DB = {
 };
 
 const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
-const THEMES = ['iron', 'pink', 'night'];
+const THEMES = ['iron', 'pink', 'night', 'sunset', 'neon', 'forest'];
+const FONT_STYLES = ['modern', 'playful', 'classic'];
 
 function loadJSON(key, fallback) {
   try {
@@ -65,7 +66,7 @@ function defaultProfileSettings() {
   return {
     units: 'lb', bodyweight: 180, gender: 'male',
     barWeight: 45, availablePlates: [45, 35, 25, 10, 5, 2.5],
-    restTimerSound: true, manualLifts: {}, theme: 'iron', tagColor: null
+    restTimerSound: true, manualLifts: {}, theme: 'iron', tagColor: null, fontStyle: 'modern'
   };
 }
 function defaultProfile() {
@@ -80,7 +81,7 @@ function defaultProfile() {
 function defaultShared() { return { aiProvider: 'gemini', aiApiKey: '', aiEnabled: false, posts: [] }; }
 function defaultDevice() { return { githubToken: '', githubGistId: '', githubLastSync: null, activeProfile: '', lastSeenPostsAt: null }; }
 
-const PROFILE_SETTING_KEYS = ['units', 'bodyweight', 'gender', 'barWeight', 'availablePlates', 'restTimerSound', 'manualLifts', 'theme', 'tagColor'];
+const PROFILE_SETTING_KEYS = ['units', 'bodyweight', 'gender', 'barWeight', 'availablePlates', 'restTimerSound', 'manualLifts', 'theme', 'tagColor', 'fontStyle'];
 const SHARED_SETTING_KEYS = ['aiProvider', 'aiApiKey', 'aiEnabled'];
 const DEVICE_SETTING_KEYS = ['githubToken', 'githubGistId', 'githubLastSync'];
 

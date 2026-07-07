@@ -58,6 +58,60 @@
   --gold: #A99366;
 }
 
+[data-theme="sunset"] {
+  --bg: #1A1210;
+  --surface: #241814;
+  --surface-2: #2E1F19;
+  --border: #463026;
+  --text: #FBEDE3;
+  --text-dim: #C4A091;
+  --accent: #FF6B4A;
+  --accent-ink: #ffffff;
+  --blue: #FFB454;
+  --amber: #FFA94D;
+  --success: #4ADE80;
+  --gold: #FFC168;
+}
+
+[data-theme="neon"] {
+  --bg: #0D0A1A;
+  --surface: #15102A;
+  --surface-2: #1E1738;
+  --border: #372B5C;
+  --text: #F1EBFF;
+  --text-dim: #9A8FC2;
+  --accent: #B14CFF;
+  --accent-ink: #ffffff;
+  --blue: #3DE8E0;
+  --amber: #FFD23F;
+  --success: #3DE8A0;
+  --gold: #FFD23F;
+}
+
+[data-theme="forest"] {
+  --bg: #10160F;
+  --surface: #171F15;
+  --surface-2: #1F2A1C;
+  --border: #34432E;
+  --text: #E9F2E3;
+  --text-dim: #97AD8C;
+  --accent: #5EBF63;
+  --accent-ink: #08120A;
+  --blue: #6FBFAE;
+  --amber: #D9A441;
+  --success: #7FD463;
+  --gold: #C4A857;
+}
+
+/* ---------------- FONT VARIANTS ---------------- */
+/* "modern" (default) uses the :root fonts above. */
+[data-font="playful"] {
+  --font-display: 'Baloo 2', sans-serif;
+}
+[data-font="classic"] {
+  --font-display: 'Fraunces', serif;
+}
+
 * { box-sizing: border-box; }
 html {
   -webkit-tap-highlight-color: transparent;
@@ -710,3 +764,76 @@ textarea {
 .pill.sugg-remove { background: rgba(76,141,255,0.12); color: var(--accent); border: 1px solid var(--accent); }
 .pill.sugg-add { background: rgba(61,220,132,0.12); color: var(--success); border: 1px solid var(--success); }
 .pill.sugg-adjust { background: rgba(255,169,77,0.12); color: var(--amber); border: 1px solid var(--amber); }
+
+/* ============================================================
+   ANIMATIONS
+   ============================================================ */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes popIn {
+  0% { transform: scale(0.7); opacity: 0; }
+  60% { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(1); }
+}
+@keyframes toastIn {
+  from { opacity: 0; transform: translate(-50%, 10px) scale(0.9); }
+  to { opacity: 1; transform: translate(-50%, 0) scale(1); }
+}
+@keyframes confettiFall {
+  0% { transform: translateY(-10px) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(100vh) rotate(540deg); opacity: 0; }
+}
+@keyframes ringPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(76,141,255,0.4); }
+  50% { box-shadow: 0 0 0 6px rgba(76,141,255,0); }
+}
+
+.tab-panel.active { animation: fadeInUp 0.32s ease both; }
+
+.card { transition: border-color 0.15s ease, transform 0.15s ease; }
+
+.btn { transition: border-color 0.15s ease, background 0.15s ease, transform 0.1s ease; }
+.btn:active { transform: scale(0.95); }
+
+.tab-btn { transition: color 0.15s ease, transform 0.1s ease; }
+.tab-btn:active { transform: scale(0.93); }
+
+.profile-btn, .day-tabs button, .exercise-picker button, .builder-chip, .reaction-chip {
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.1s ease;
+}
+.profile-btn:active, .day-tabs button:active, .exercise-picker button:active, .builder-chip:active {
+  transform: scale(0.94);
+}
+.reaction-chip:active { transform: scale(0.85); }
+.reaction-chip.just-reacted { animation: popIn 0.35s ease; }
+
+.theme-swatch { transition: transform 0.15s ease; }
+.theme-swatch:hover { transform: scale(1.12); }
+.theme-swatch.active { animation: ringPulse 1.6s ease infinite; }
+
+.toast { animation: toastIn 0.25s ease; }
+
+.profile-panel { animation: fadeInUp 0.2s ease; }
+
+.suggestion-card, .post-card, .muscle-tile, .tier-card { animation: fadeInUp 0.3s ease both; }
+
+.pr-toast-badge { animation: popIn 0.4s ease; }
+
+.confetti-piece {
+  position: fixed;
+  top: -20px;
+  width: 8px; height: 14px;
+  z-index: 100;
+  pointer-events: none;
+  animation: confettiFall 1.8s ease-in forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

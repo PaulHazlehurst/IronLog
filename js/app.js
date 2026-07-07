@@ -20,11 +20,28 @@ function toast(msg) {
   toast._t = setTimeout(() => el.classList.remove('show'), 2800);
 }
 
+function fireConfetti() {
+  const colors = ['#4C8DFF', '#F0559C', '#2FD4C0', '#FFA94D', '#8B7CF6', '#4ADE80'];
+  const count = 24;
+  for (let i = 0; i < count; i++) {
+    const piece = document.createElement('div');
+    piece.className = 'confetti-piece';
+    piece.style.left = `${Math.random() * 100}vw`;
+    piece.style.background = colors[Math.floor(Math.random() * colors.length)];
+    piece.style.animationDelay = `${Math.random() * 0.3}s`;
+    piece.style.animationDuration = `${1.4 + Math.random() * 0.8}s`;
+    piece.style.borderRadius = Math.random() > 0.5 ? '50%' : '2px';
+    document.body.appendChild(piece);
+    setTimeout(() => piece.remove(), 2600);
+  }
+}
+
 function fmtWeight(w, unit) { return `${w}${unit}`; }
 
 function applyTheme() {
   const s = Storage.getSettings();
   document.documentElement.dataset.theme = s.theme || 'iron';
+  document.documentElement.dataset.font = s.fontStyle || 'modern';
 }
 
 function renderProfileButton() {
@@ -59,6 +76,7 @@ function renderProfilePanel() {
       <button class="btn btn-sm" id="pushPlanBtn">Push</button>
     </div>` : ''}
     ${names.length > 0 ? `<h3>Theme</h3><div class="theme-swatches" id="themeSwatches"></div>` : ''}
+    ${names.length > 0 ? `<h3 style="margin-top:12px;">Font</h3><div class="builder-chip-group" id="fontSwatches"></div>` : ''}
     ${names.length > 0 ? `<h3 style="margin-top:12px;">Your color (used on Home posts)</h3><div class="theme-swatches" id="tagColorSwatches"></div>` : ''}
   `;
   const listWrap = $('#profileListWrap');
@@ -126,7 +144,7 @@ function renderProfilePanel() {
   };
   const swatchWrap = $('#themeSwatches');
   if (swatchWrap) {
-    const swatchColors = { iron: '#4C8DFF', pink: '#F0559C', night: '#7B8794' };
+    const swatchColors = { iron: '#4C8DFF', pink: '#F0559C', night: '#7B8794', sunset: '#FF6B4A', neon: '#B14CFF', forest: '#5EBF63' };
     THEMES.forEach(t => {
       const sw = document.createElement('div');
       sw.className = 'theme-swatch' + (settings.theme === t ? ' active' : '');
@@ -134,6 +152,20 @@ function renderProfilePanel() {
       sw.title = t.charAt(0).toUpperCase() + t.slice(1);
       sw.onclick = () => { Storage.saveSettings({ theme: t }); applyTheme(); renderProfilePanel(); };
       swatchWrap.appendChild(sw);
+    });
+  }
+  const fontWrap = $('#fontSwatches');
+  if (fontWrap) {
+    const fontLabels = { modern: 'Modern', playful: 'Playful', classic: 'Classic' };
+    const fontFamilies = { modern: "'Space Grotesk', sans-serif", playful: "'Baloo 2', sans-serif", classic: "'Fraunces', serif" };
+    FONT_STYLES.forEach(f => {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'builder-chip' + (settings.fontStyle === f ? ' selected' : '');
+      chip.style.fontFamily = fontFamilies[f];
+      chip.textContent = `Aa ${fontLabels[f]}`;
+      chip.onclick = () => { Storage.saveSettings({ fontStyle: f }); applyTheme(); renderProfilePanel(); };
+      fontWrap.appendChild(chip);
     });
   }
   const tagWrap = $('#tagColorSwatches');
@@ -877,6 +909,7 @@ function renderTodayTab() {
     toast(prCount > 0
       ? `Session saved. <span class="pr-toast-badge">${prCount} New PR${prCount > 1 ? 's' : ''}!</span>`
       : "Session saved — next week's targets will update from this.");
+    if (prCount > 0) fireConfetti();
     renderTodayTab();
   };
 }
