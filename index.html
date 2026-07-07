@@ -24,11 +24,15 @@
 
 <header class="app-header">
   <h1>IRON<span>LOG</span></h1>
-  <div class="week-dial">
-    <div id="weekDialRing" class="ring"></div>
-    <div id="weekDialLabel" class="label">Week 1<strong>Training</strong></div>
+  <div style="display:flex;align-items:center;gap:12px;">
+    <button class="profile-btn" id="profileBtn"><span class="profile-avatar" id="profileAvatar">?</span><span id="profileNameLabel">Profile</span></button>
+    <div class="week-dial">
+      <div id="weekDialRing" class="ring"></div>
+      <div id="weekDialLabel" class="label">Week 1<strong>Training</strong></div>
+    </div>
   </div>
 </header>
+<div id="profilePanel" class="profile-panel" style="display:none;"></div>
 
 <nav class="tab-nav">
   <button class="tab-btn" data-tab="plan">Plan</button>

@@ -36,6 +36,39 @@ Use **Settings → Export backup** regularly (a `.json` file downloads to your
 device) and **Import backup** to restore or move it to another
 browser/device.
 
+## Profiles
+
+Tap the profile button (top right) to create or switch profiles — each
+profile has its own plan, logs, and theme. All profiles live inside the same
+synced store, so:
+
+- Anyone using the app on their own device creates their own profile there,
+  or picks their name if it already exists (once you're synced to the same
+  GitHub Gist, both devices see all profiles).
+- **Push my plan to…** in the profile panel copies your current weekly plan
+  (exercise template only, not your logged history) onto another profile —
+  handy for handing someone a starting point.
+- Each profile picks its own **theme** (Iron / Pink / Night) from the same
+  panel.
+
+## Shared AI key
+
+The Gemini key in Settings is shared across every profile rather than
+per-person. Since this is still a free static site with no backend, "shared"
+here means the key travels with your synced data — enter it once on one
+device, and once synced, every other profile/device connected to the same
+Gist can use AI features too, no separate key needed. The tradeoff: that key
+is technically visible to anyone with access to your synced data, so use one
+you're comfortable sharing within your household rather than a personal key
+tied to a paid account.
+
+## AI plan builder
+
+In the Plan tab, "Build my plan" asks what equipment you have, how many days
+a week you want to train, and which muscle groups (if any) to emphasize,
+then generates a full weekly plan. You get a preview before anything
+replaces your current plan — nothing is applied automatically.
+
 ## Installing it like an app (PWA)
 
 Iron Log is a Progressive Web App — it can live on your home screen with its
