@@ -17,7 +17,7 @@
 
 const DB = {
   PROFILES: 'ih_profiles',        // { [name]: { plan, logs, cycle, weekOverrides, settings } }
-  SHARED: 'ih_shared',            // { aiProvider, aiApiKey, aiEnabled } — synced, app-wide
+  SHARED: 'ih_shared',            // { posts, specialDate } — synced, household-wide. NEVER put secrets/API keys in here.
   DEVICE: 'ih_device',            // { githubToken, githubGistId, githubLastSync, activeProfile } — local only
   // legacy pre-profile keys, read once for migration then left alone
   LEGACY_PLAN: 'ih_plan', LEGACY_LOGS: 'ih_logs', LEGACY_SETTINGS: 'ih_settings',
@@ -25,7 +25,7 @@ const DB = {
 };
 
 const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
-const THEMES = ['iron', 'pink', 'night', 'sunset', 'neon', 'forest'];
+const THEMES = ['iron', 'pink', 'night', 'sunset', 'neon', 'forest', 'holiday', 'winter'];
 const FONT_STYLES = ['modern', 'playful', 'classic'];
 
 function loadJSON(key, fallback) {
@@ -79,12 +79,12 @@ function defaultProfile() {
     settings: defaultProfileSettings()
   };
 }
-function defaultShared() { return { aiProvider: 'gemini', aiApiKey: '', aiEnabled: false, posts: [], specialDate: null }; }
-function defaultDevice() { return { githubToken: '', githubGistId: '', githubLastSync: null, activeProfile: '', lastSeenPostsAt: null }; }
+function defaultShared() { return { posts: [], specialDate: null }; }
+function defaultDevice() { return { githubToken: '', githubGistId: '', githubLastSync: null, activeProfile: '', lastSeenPostsAtByProfile: {}, aiProvider: 'gemini', aiApiKey: '', aiEnabled: false }; }
 
 const PROFILE_SETTING_KEYS = ['units', 'bodyweight', 'gender', 'barWeight', 'availablePlates', 'restTimerSound', 'manualLifts', 'theme', 'tagColor', 'fontStyle', 'ambientEffect'];
-const SHARED_SETTING_KEYS = ['aiProvider', 'aiApiKey', 'aiEnabled', 'specialDate'];
-const DEVICE_SETTING_KEYS = ['githubToken', 'githubGistId', 'githubLastSync'];
+const SHARED_SETTING_KEYS = ['specialDate'];
+const DEVICE_SETTING_KEYS = ['githubToken', 'githubGistId', 'githubLastSync', 'aiProvider', 'aiApiKey', 'aiEnabled'];
 
 /* ---------------- PROFILE MANAGEMENT ---------------- */
 function getAllProfilesRaw() { return loadJSON(DB.PROFILES, {}); }
@@ -338,7 +338,9 @@ const Storage = {
         const merged = { ...getAllProfilesRaw(), ...parsed.profiles };
         saveAllProfilesRaw(merged);
         if (parsed.shared) {
-          const mergedShared = { ...defaultShared(), ...loadJSON(DB.SHARED, {}), ...parsed.shared };
+          const cleanedShared = { ...parsed.shared };
+          delete cleanedShared.aiApiKey; delete cleanedShared.aiProvider; delete cleanedShared.aiEnabled;
+          const mergedShared = { ...defaultShared(), ...loadJSON(DB.SHARED, {}), ...cleanedShared };
           saveJSON(DB.SHARED, mergedShared);
         }
         notifyChanged();
@@ -387,8 +389,13 @@ const Storage = {
     saveJSON(DB.SHARED, shared);
     notifyChanged();
   },
-  getLastSeenPostsAt() { return getDeviceRaw().lastSeenPostsAt; },
-  setLastSeenPostsAt(iso) { const d = getDeviceRaw(); d.lastSeenPostsAt = iso; saveDeviceRaw(d); },
+  getLastSeenPostsAt(profileName) { return getDeviceRaw().lastSeenPostsAtByProfile?.[profileName] || null; },
+  setLastSeenPostsAt(profileName, iso) {
+    const d = getDeviceRaw();
+    d.lastSeenPostsAtByProfile = d.lastSeenPostsAtByProfile || {};
+    d.lastSeenPostsAtByProfile[profileName] = iso;
+    saveDeviceRaw(d);
+  },
 
   // Both/all profiles logged at least one session in the current Mon-Sun week.
   jointStreakWeeks() {

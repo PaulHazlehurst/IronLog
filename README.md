@@ -84,21 +84,19 @@ synced store, so:
 - Each profile picks its own **theme** (Iron / Pink / Night) from the same
   panel.
 
-## Shared AI key
+## AI key — device-local, not shared
 
-The Gemini key in Settings is shared across every profile rather than
-per-person. Since this is still a free static site with no backend, "shared"
-here means the key travels with your synced data — enter it once on one
-device, and once synced, every other profile/device connected to the same
-Gist can use AI features too, no separate key needed. The tradeoff: that key
-is technically visible to anyone with access to your synced data, so use one
-you're comfortable sharing within your household rather than a personal key
-tied to a paid account.
+Each device needs its own free Gemini key, entered in Settings on that
+device. It's deliberately never synced or written into your Gist — see
+"Critical fix" above for why. If you want AI features on both your and
+your partner's device, each of you enters your own key (both totally free
+from aistudio.google.com/apikey).
 
 ## Themes, fonts & motion
 
-Six themes now (profile panel): Iron, Pink, Night, plus **Sunset** (warm
-coral/amber), **Neon** (purple/cyan synthwave), and **Forest** (calm green).
+Eight themes now (profile panel): Iron, Pink, Night, Sunset (warm
+coral/amber), Neon (purple/cyan synthwave), Forest (calm green), Holiday
+(Christmas red/green/gold), and Winter (icy blue/silver).
 Each profile also picks a **font style** — Modern (the default, Space
 Grotesk), Playful (rounded Baloo 2), or Classic (elegant Fraunces serif) —
 right next to the theme swatches.
@@ -106,6 +104,78 @@ right next to the theme swatches.
 Small motion throughout: tabs fade in on switch, buttons give a tactile
 press, cards animate in, and hitting a new PR triggers a quick confetti
 burst. Respects `prefers-reduced-motion` if your device has that turned on.
+
+## Critical fix: AI key was being auto-revoked by Google (read this first)
+
+**What was happening:** the AI key sync feature stored your raw Gemini key
+inside the synced Gist. GitHub Gists don't actually have a private tier —
+"secret" only means unlisted, the content is still readable by anyone with
+the URL, and GitHub scans all gist content (secret or public) for exposed
+API key patterns and reports them straight to the provider. Google then
+auto-revokes the key within minutes, every time, permanently — this was
+never a one-off glitch, it was guaranteed to keep happening as long as the
+key lived in that file.
+
+**The fix:** your Gemini key is no longer synced at all. It now lives only
+on the device you enter it on, in the same local-only tier as your GitHub
+token. Each person/device needs their own free key going forward — paste
+it into Settings on each device separately. The next time you sync, the
+app also automatically deletes the old `iron-log-data.json` file from your
+Gist if it's still sitting there, since that's the file Google's notice
+pointed at.
+
+**One more step for you specifically:** the key that got revoked is dead
+and can't be reused regardless — generate a completely fresh one at
+aistudio.google.com/apikey, paste it into Settings on your device, and do
+the same separately for your girlfriend's device.
+
+## Getting updates without re-adding the app
+
+iPhone home-screen apps are notoriously slow to notice new versions. Fixed
+several layers of this: the service worker now bypasses the browser's own
+HTTP cache (not just its own), checks for updates every time you bring the
+app to the foreground, and auto-reloads once a new version takes over. As a
+guaranteed fallback, **Settings → App updates → Check for updates now**
+clears everything and forces a fresh load — no delete-and-re-add needed.
+
+## Fixed: gift animation not showing after switching profiles
+
+Real bug — "seen" status for the Home feed was tracked once per *device*,
+not per *profile*. So sending a gift, then switching to the other profile
+on the same device, immediately looked "already seen" since the device-wide
+timestamp had just been updated by your own action. Now tracked separately
+per profile, so switching profiles on one device (or two separate devices)
+each correctly show unseen gifts/activity independently.
+
+## Two more themes: Holiday & Winter
+
+Holiday (Christmas red/green/gold) and Winter (icy blue/silver) join the
+lineup — 8 themes total now. Pair either with the **Snow** background
+effect (profile panel → Background effect) for a fully festive look — that
+snow option already existed from the last update, alongside Petals and
+Hearts.
+
+## Notifications reaching her lock/home screen — how to actually set it up
+
+1. She must open the app **from its home-screen icon**, not a Safari tab.
+2. Needs iOS 16.4 or later.
+3. In the app: **Home tab → Enable notifications on this device** (grants
+   permission inside the app).
+4. Then check **iPhone Settings app → Notifications → Iron Log** (it'll
+   appear in that list once permission's been granted at least once) —
+   make sure Allow Notifications is on, and Banners/Sounds are enabled the
+   way she wants.
+5. Use **Send myself a test notification** (appears next to the
+   notifications toggle once enabled) to confirm it's working without
+   needing a real gift or comment from you.
+
+**Important limit, worth repeating clearly:** this fires a notification
+whenever the app checks for new activity — on open, on returning from the
+background, or after a sync. It does **not** wake a fully closed/locked
+phone the instant something happens; that needs real push notifications,
+which require a small always-on relay server to trigger delivery (still
+free to build, just a separate, bigger piece of work). If instant delivery
+while locked matters enough, say so and I'll scope that out properly.
 
 ## Critical fix: sync data safety (read this if you use sync)
 

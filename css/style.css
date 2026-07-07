@@ -103,6 +103,36 @@
   --gold: #C4A857;
 }
 
+[data-theme="holiday"] {
+  --bg: #12181A;
+  --surface: #182220;
+  --surface-2: #1F2C29;
+  --border: #33453E;
+  --text: #F5EFE6;
+  --text-dim: #9DB0A8;
+  --accent: #E0483F;
+  --accent-ink: #ffffff;
+  --blue: #4C9A6A;
+  --amber: #E0B84A;
+  --success: #4C9A6A;
+  --gold: #E0B84A;
+}
+
+[data-theme="winter"] {
+  --bg: #0D1520;
+  --surface: #131E2C;
+  --surface-2: #192736;
+  --border: #2A3C4E;
+  --text: #EAF3FB;
+  --text-dim: #8BA3B8;
+  --accent: #6FC3E8;
+  --accent-ink: #071620;
+  --blue: #9FD9F0;
+  --amber: #D8C77E;
+  --success: #6FD4B8;
+  --gold: #CFE8F5;
+}
+
 /* ---------------- FONT VARIANTS ---------------- */
 /* "modern" (default) uses the :root fonts above. */
 [data-font="playful"] {

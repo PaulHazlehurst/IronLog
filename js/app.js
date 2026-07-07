@@ -148,7 +148,7 @@ function renderProfilePanel() {
   };
   const swatchWrap = $('#themeSwatches');
   if (swatchWrap) {
-    const swatchColors = { iron: '#4C8DFF', pink: '#F0559C', night: '#7B8794', sunset: '#FF6B4A', neon: '#B14CFF', forest: '#5EBF63' };
+    const swatchColors = { iron: '#4C8DFF', pink: '#F0559C', night: '#7B8794', sunset: '#FF6B4A', neon: '#B14CFF', forest: '#5EBF63', holiday: '#E0483F', winter: '#6FC3E8' };
     THEMES.forEach(t => {
       const sw = document.createElement('div');
       sw.className = 'theme-swatch' + (settings.theme === t ? ' active' : '');
@@ -278,7 +278,9 @@ function timeAgo(iso) {
 
 function notifPermissionButtonHTML() {
   if (!('Notification' in window)) return '';
-  if (Notification.permission === 'granted') return `<p class="helper-text">Notifications are on for this device.</p>`;
+  if (Notification.permission === 'granted') {
+    return `<p class="helper-text">Notifications are on for this device.</p><button class="btn btn-sm" id="testNotifBtn">Send myself a test notification</button>`;
+  }
   if (Notification.permission === 'denied') return `<p class="helper-text">Notifications are blocked for this site in your browser settings.</p>`;
   return `<button class="btn btn-sm" id="enableNotifBtn">Enable notifications on this device</button>`;
 }
@@ -339,7 +341,7 @@ function renderHomeTab() {
   const jointStreak = Storage.jointStreakWeeks();
 
   // Check for unseen gifts from someone else before we mark everything read.
-  const lastSeen = Storage.getLastSeenPostsAt();
+  const lastSeen = Storage.getLastSeenPostsAt(activeName);
   const unseenGift = posts.find(p => p.giftType && p.authorProfile !== activeName && (!lastSeen || new Date(p.createdAt) > new Date(lastSeen)));
 
   panel.innerHTML = `
@@ -431,6 +433,16 @@ function renderHomeTab() {
     toast(perm === 'granted' ? 'Notifications enabled on this device.' : 'Notifications not enabled.');
     renderHomeTab();
   };
+  const testNotifBtn = $('#testNotifBtn');
+  if (testNotifBtn) testNotifBtn.onclick = () => {
+    const body = 'This is a test — if you see this, notifications are working on this device.';
+    if (navigator.serviceWorker && navigator.serviceWorker.ready) {
+      navigator.serviceWorker.ready.then(reg => reg.showNotification('Iron Log', { body, icon: 'icons/icon-192.png', badge: 'icons/icon-192.png' }));
+    } else {
+      new Notification('Iron Log', { body });
+    }
+    toast('Test notification sent.');
+  };
 
   const feed = $('#postsFeed');
   if (posts.length === 0) {
@@ -441,7 +453,7 @@ function renderHomeTab() {
   }
 
   if (unseenGift) fireFalling(unseenGift.giftType);
-  Storage.setLastSeenPostsAt(new Date().toISOString());
+  Storage.setLastSeenPostsAt(activeName, new Date().toISOString());
 }
 
 function renderPostCard(p, activeName) {
@@ -519,9 +531,9 @@ function escapeHtml(str) {
 
 function checkForNewActivity() {
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
-  const lastSeen = Storage.getLastSeenPostsAt();
-  const posts = Storage.getPosts();
   const { name: activeName } = Profiles.getActive();
+  const lastSeen = Storage.getLastSeenPostsAt(activeName);
+  const posts = Storage.getPosts();
   const fresh = posts.filter(p => p.authorProfile !== activeName && (!lastSeen || new Date(p.createdAt) > new Date(lastSeen)));
   if (fresh.length === 0) return;
   const body = fresh.length === 1
@@ -1365,7 +1377,8 @@ function renderSettingsTab() {
     </div>
     <div class="card">
       <h3>AI assist</h3>
-      <p class="helper-text">Used for exercise suggestions, form/mind-muscle cues, plan review, and the AI plan builder. This key is <strong>shared across every profile</strong> and, if GitHub sync is on, travels with your synced data — so entering it once here makes AI available on your partner's profile and device too, without them needing their own key. That also means anyone with access to your synced data could see this key, so use a key you're comfortable sharing within your household. Calls go directly from the browser to Google's API — nothing passes through any server of mine. Get a free key at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>.</p>
+      <p class="helper-text">Used for exercise suggestions, form/mind-muscle cues, plan review, and the AI plan builder. <strong>This key stays only on this device</strong> — it is never synced, never written into your shared Gist, and never shared with other profiles or devices. That's intentional: GitHub scans gist content (even "secret" ones) for exposed API keys and Google auto-revokes anything it finds, so a key stored inside synced data will always eventually get killed. Each person/device needs to enter their own free key. Calls go directly from the browser to Google's API — nothing passes through any server of mine. Get a free key at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>.</p>
+      <p class="helper-text" style="color:var(--amber);"><strong>Never paste this key anywhere else</strong> — not into a code file, a GitHub issue, a commit, or a gist (public or secret). Only ever paste it here.</p>
       <div class="row">
         <div><label>Enable AI</label><select id="setAiEnabled"><option value="false" ${!s.aiEnabled?'selected':''}>Off</option><option value="true" ${s.aiEnabled?'selected':''}>On</option></select></div>
         <div><label>Gemini API key</label><input id="setAiKey" type="password" value="${s.aiApiKey||''}" placeholder="Paste your key"></div>
@@ -1395,6 +1408,11 @@ function renderSettingsTab() {
         <input type="file" id="importFile" accept="application/json" style="display:none;">
       </div>
       <p class="helper-text">Exports only your currently active profile (${Profiles.activeName() || 'none selected'}). Importing adds it as a new profile rather than overwriting — handy for moving a profile to a fresh browser.</p>
+    </div>
+    <div class="card">
+      <h3>App updates</h3>
+      <p class="helper-text">The app checks for updates automatically, but iPhone's home-screen apps can be slow to notice new versions. If something feels out of date, tap this — no need to delete and re-add the app.</p>
+      <button class="btn btn-sm" id="forceRefreshBtn">Check for updates now</button>
     </div>
     <div class="card">
       <h3>Emergency restore</h3>
@@ -1427,7 +1445,10 @@ function renderSettingsTab() {
         const text = await AI.callGemini("Reply with exactly one word: connected");
         resultEl.innerHTML = `<p class="helper-text" style="color:var(--success);">✓ Working — Gemini replied: "${escapeHtml(text.slice(0,60))}"</p>`;
       } catch (err) {
-        resultEl.innerHTML = `<p class="helper-text" style="color:var(--accent);">✗ Failed: ${escapeHtml(err.message)}</p>`;
+        const hint = err.message.includes('401')
+          ? ' This usually means the key was revoked — check your email for a notice from Google about it being found exposed somewhere public, and generate a fresh one if so.'
+          : '';
+        resultEl.innerHTML = `<p class="helper-text" style="color:var(--accent);">✗ Failed: ${escapeHtml(err.message)}${hint}</p>`;
       }
     }
     btn.disabled = false; btn.textContent = 'Test connection';
@@ -1490,6 +1511,20 @@ function renderSettingsTab() {
       renderActiveTab();
     };
     reader.readAsText(file);
+  };
+  $('#forceRefreshBtn').onclick = async () => {
+    toast('Clearing cache and checking for updates…');
+    try {
+      if ('serviceWorker' in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map(r => r.unregister()));
+      }
+      if ('caches' in window) {
+        const names = await caches.keys();
+        await Promise.all(names.map(n => caches.delete(n)));
+      }
+    } catch (e) { console.error(e); }
+    window.location.reload();
   };
   $('#restoreBtn').onclick = () => {
     const text = $('#restoreTextarea').value.trim();

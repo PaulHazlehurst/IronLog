@@ -8,7 +8,7 @@
    time you want to force every device to drop old cached files.
    ============================================================ */
 
-const CACHE_VERSION = 'iron-log-v2';
+const CACHE_VERSION = 'iron-log-v3';
 const APP_SHELL = [
   './',
   './index.html',
@@ -66,7 +66,7 @@ self.addEventListener('fetch', (event) => {
       event.request.url.includes('api.github.com')) return;
 
   event.respondWith(
-    fetch(event.request)
+    fetch(event.request, { cache: 'no-store' })
       .then((res) => {
         const copy = res.clone();
         caches.open(CACHE_VERSION).then((cache) => cache.put(event.request, copy));

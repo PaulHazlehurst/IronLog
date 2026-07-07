@@ -3,13 +3,21 @@
    ------------------------------------------------------------
    SAFETY MODEL: each profile lives in its OWN file inside the
    Gist (profile__<slug>.json). A device only ever WRITES the
-   file for the profile it currently has active, plus the shared
-   file (AI settings + the Home feed, merged rather than
+   file for the profile it currently has active, plus a shared
+   file (Home feed + special date, merged rather than
    overwritten). It never writes another profile's file. That
    means no device can ever stomp on someone else's profile data,
-   even by accident — the exact failure mode that happened before
-   this rewrite, where a first-time connection pushed one
-   person's near-empty local data over the whole shared store.
+   even by accident.
+
+   IMPORTANT: GitHub Gists are never truly private — "secret"
+   just means unlisted, the content is still world-readable to
+   anyone with the URL, and GitHub actively scans gist content
+   (secret or public) for exposed API keys and reports them to
+   the provider, who auto-revokes them. Because of that, API
+   keys (Gemini, etc.) are NEVER stored in DB.SHARED and never
+   touch this file — they live only in the device-local bucket
+   in storage.js and are deliberately excluded from every sync
+   payload below.
    ============================================================ */
 
 const SHARED_FILENAME = 'shared.json';
@@ -76,20 +84,18 @@ const Sync = {
         gistId = existing?.id || null;
       }
 
-      // Merge shared.json (posts + AI settings) against whatever's live on
+      // Merge shared.json (posts + special date) against whatever's live on
       // GitHub right now, rather than blindly overwriting it — this is what
       // stops two people's comments/reactions from clobbering each other.
       let remoteShared = null;
+      let existingGist = null;
       if (gistId) {
-        const gist = await Sync.fetchGist(device.githubToken, gistId);
-        const sharedContent = gist.files?.[SHARED_FILENAME]?.content;
+        existingGist = await Sync.fetchGist(device.githubToken, gistId);
+        const sharedContent = existingGist.files?.[SHARED_FILENAME]?.content;
         if (sharedContent) { try { remoteShared = JSON.parse(sharedContent); } catch (e) { /* ignore */ } }
       }
       const localShared = { ...defaultShared(), ...loadJSON(DB.SHARED, {}) };
       const mergedShared = {
-        aiProvider: localShared.aiProvider || remoteShared?.aiProvider || 'gemini',
-        aiApiKey: localShared.aiApiKey || remoteShared?.aiApiKey || '',
-        aiEnabled: localShared.aiEnabled || remoteShared?.aiEnabled || false,
         specialDate: localShared.specialDate || remoteShared?.specialDate || null,
         posts: Sync.mergePosts(remoteShared?.posts, localShared.posts)
       };
@@ -100,6 +106,10 @@ const Sync = {
         [SHARED_FILENAME]: { content: JSON.stringify(mergedShared, null, 2) },
         [slugForProfile(activeName)]: { content: JSON.stringify({ name: activeName, data: profiles[activeName] }, null, 2) }
       };
+      // Clean up the old single-blob file if it's still sitting in the gist —
+      // it may contain a previously-synced AI key from before this was fixed.
+      // Setting a file's content to null deletes it from the gist entirely.
+      if (existingGist?.files?.[LEGACY_FILENAME]) files[LEGACY_FILENAME] = null;
 
       let res;
       if (gistId) {
@@ -158,12 +168,21 @@ const Sync = {
         });
         saveAllProfilesRaw(merged);
         const sharedContent = files[SHARED_FILENAME]?.content;
-        if (sharedContent) saveJSON(DB.SHARED, JSON.parse(sharedContent));
+        if (sharedContent) {
+          const parsedShared = JSON.parse(sharedContent);
+          delete parsedShared.aiApiKey; delete parsedShared.aiProvider; delete parsedShared.aiEnabled;
+          saveJSON(DB.SHARED, parsedShared);
+        }
       } else if (files[LEGACY_FILENAME]) {
-        // One-time read of the old single-blob format; next push migrates it forward.
+        // One-time read of the old single-blob format; next push migrates it
+        // forward and deletes this file. Strip any AI key it may still hold —
+        // that field should never live in shared/synced storage.
         const bundle = JSON.parse(files[LEGACY_FILENAME].content);
         if (bundle.profiles) saveAllProfilesRaw(bundle.profiles);
-        if (bundle.shared) saveJSON(DB.SHARED, bundle.shared);
+        if (bundle.shared) {
+          delete bundle.shared.aiApiKey; delete bundle.shared.aiProvider; delete bundle.shared.aiEnabled;
+          saveJSON(DB.SHARED, bundle.shared);
+        }
       } else {
         return { ok: false, message: 'Found the sync gist but it had no readable data.' };
       }
