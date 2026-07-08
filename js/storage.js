@@ -76,14 +76,17 @@ function defaultProfile() {
     logs: [],
     cycle: { startDate: isoDate(), deloadEvery: 5, peakEvery: 0 },
     weekOverrides: {},
-    settings: defaultProfileSettings()
+    settings: defaultProfileSettings(),
+    tokens: 0,
+    tokenLog: [],
+    shop: []
   };
 }
-function defaultShared() { return { posts: [], specialDate: null }; }
+function defaultShared() { return { posts: [], specialDate: null, tokensPerWorkout: 10, tokensPerPR: 15 }; }
 function defaultDevice() { return { githubToken: '', githubGistId: '', githubLastSync: null, activeProfile: '', lastSeenPostsAtByProfile: {}, aiProvider: 'gemini', aiApiKey: '', aiEnabled: false }; }
 
 const PROFILE_SETTING_KEYS = ['units', 'bodyweight', 'gender', 'barWeight', 'availablePlates', 'restTimerSound', 'manualLifts', 'theme', 'tagColor', 'fontStyle', 'ambientEffect', 'themesTried'];
-const SHARED_SETTING_KEYS = ['specialDate'];
+const SHARED_SETTING_KEYS = ['specialDate', 'tokensPerWorkout', 'tokensPerPR'];
 const DEVICE_SETTING_KEYS = ['githubToken', 'githubGistId', 'githubLastSync', 'aiProvider', 'aiApiKey', 'aiEnabled'];
 
 /* ---------------- PROFILE MANAGEMENT ---------------- */
@@ -357,6 +360,45 @@ const Storage = {
     } catch (e) {
       return { ok: false, message: 'Invalid JSON — check you copied the whole thing, including the outer { }.' };
     }
+  },
+
+  /* ---------------- TOKENS & SHOP ---------------- */
+  getTokens() { return Profiles.getActive().data.tokens || 0; },
+  addTokens(amount, reason) {
+    Profiles.updateActive(p => {
+      p.tokens = (p.tokens || 0) + amount;
+      p.tokenLog = [...(p.tokenLog || []), { id: uid(), amount, reason, createdAt: new Date().toISOString() }].slice(-100);
+    });
+    notifyChanged();
+  },
+  getTokenLog() { return (Profiles.getActive().data.tokenLog || []).slice().reverse(); },
+
+  getShop(profileName) { return getAllProfilesRaw()[profileName]?.shop || []; },
+  saveShop(items) { Profiles.updateActive(p => p.shop = items); notifyChanged(); },
+
+  // Spends tokens from the ACTIVE profile's own balance to redeem an item
+  // from someone else's shop. Never writes to the shop owner's data — only
+  // the redeemer's balance changes, plus a Home post announcing it so the
+  // owner sees it and can follow through.
+  redeemReward(ownerProfileName, itemId) {
+    const activeName = Profiles.activeName();
+    if (ownerProfileName === activeName) return { ok: false, message: "That's your own shop." };
+    const item = Storage.getShop(ownerProfileName).find(i => i.id === itemId);
+    if (!item) return { ok: false, message: 'Item not found.' };
+    const balance = Storage.getTokens();
+    if (balance < item.cost) return { ok: false, message: `Not enough tokens — need ${item.cost - balance} more.` };
+    Profiles.updateActive(p => {
+      p.tokens = (p.tokens || 0) - item.cost;
+      p.tokenLog = [...(p.tokenLog || []), { id: uid(), amount: -item.cost, reason: `Redeemed: ${item.name}`, createdAt: new Date().toISOString() }].slice(-100);
+    });
+    const settings = Storage.getSettings();
+    Storage.addPost({
+      type: 'redemption',
+      authorProfile: activeName,
+      authorColor: settings.tagColor,
+      text: `redeemed "${item.name}" from ${ownerProfileName}'s shop for ${item.cost} tokens 🎁`
+    });
+    return { ok: true };
   },
 
   wipeAll() {

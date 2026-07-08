@@ -375,6 +375,96 @@ function renderTogetherCardHTML(specialDate) {
     </div>`;
 }
 
+function renderShopSection(container, activeName) {
+  const profiles = getAllProfilesRaw();
+  const otherNames = Object.keys(profiles).filter(n => n !== activeName);
+  const myShop = Storage.getShop(activeName);
+
+  container.innerHTML = `
+    ${otherNames.map((name, i) => `
+      <div class="shop-owner-block">
+        <h4>${escapeHtml(name)}'s shop</h4>
+        <div class="shop-items" id="shopItems-${i}"></div>
+      </div>
+    `).join('')}
+    <div class="shop-owner-block">
+      <div class="row" style="justify-content:space-between;align-items:center;">
+        <h4>My shop</h4>
+        <button class="btn btn-sm" id="addShopItemBtn">+ Add item</button>
+      </div>
+      <p class="helper-text">Items you're offering — your partner spends their own tokens to redeem these.</p>
+      <div class="shop-items" id="myShopItems"></div>
+      <div id="addShopItemForm"></div>
+    </div>
+  `;
+
+  otherNames.forEach((name, i) => {
+    const wrap = $(`#shopItems-${i}`, container);
+    const items = Storage.getShop(name);
+    if (items.length === 0) { wrap.innerHTML = '<p class="helper-text">No items yet.</p>'; return; }
+    items.forEach(item => {
+      const row = document.createElement('div');
+      row.className = 'shop-item-row';
+      row.innerHTML = `
+        <div><div class="shop-item-name">${escapeHtml(item.name)}</div>${item.description ? `<div class="exercise-meta">${escapeHtml(item.description)}</div>` : ''}</div>
+        <div class="row" style="flex:0 0 auto;">
+          <span class="shop-item-cost">🪙 ${item.cost}</span>
+          <button class="btn btn-sm">Redeem</button>
+        </div>
+      `;
+      row.querySelector('button').onclick = () => {
+        if (!confirm(`Redeem "${item.name}" for ${item.cost} tokens?`)) return;
+        const res = Storage.redeemReward(name, item.id);
+        toast(res.ok ? `Redeemed "${item.name}"! 🎁` : res.message);
+        if (res.ok) renderHomeTab();
+      };
+      wrap.appendChild(row);
+    });
+  });
+
+  const myWrap = $('#myShopItems', container);
+  if (myShop.length === 0) {
+    myWrap.innerHTML = '<p class="helper-text">Nothing offered yet — add something your partner can redeem tokens for.</p>';
+  } else {
+    myShop.forEach(item => {
+      const row = document.createElement('div');
+      row.className = 'shop-item-row';
+      row.innerHTML = `
+        <div><div class="shop-item-name">${escapeHtml(item.name)}</div>${item.description ? `<div class="exercise-meta">${escapeHtml(item.description)}</div>` : ''}</div>
+        <div class="row" style="flex:0 0 auto;">
+          <span class="shop-item-cost">🪙 ${item.cost}</span>
+          <button class="btn btn-sm btn-danger">Remove</button>
+        </div>
+      `;
+      row.querySelector('button').onclick = () => {
+        Storage.saveShop(myShop.filter(i => i.id !== item.id));
+        renderShopSection(container, activeName);
+      };
+      myWrap.appendChild(row);
+    });
+  }
+
+  $('#addShopItemBtn', container).onclick = () => {
+    const formEl = $('#addShopItemForm', container);
+    formEl.innerHTML = `
+      <div class="row" style="margin-top:8px;">
+        <input id="newItemName" placeholder="Item name">
+        <input id="newItemCost" type="number" placeholder="Cost in tokens" min="1">
+      </div>
+      <input id="newItemDesc" placeholder="Description (optional)" style="margin-top:6px;">
+      <button class="btn btn-sm btn-primary" id="saveNewItemBtn" style="margin-top:6px;">Save item</button>
+    `;
+    $('#saveNewItemBtn', formEl).onclick = () => {
+      const name = $('#newItemName', formEl).value.trim();
+      const cost = Number($('#newItemCost', formEl).value) || 0;
+      const desc = $('#newItemDesc', formEl).value.trim();
+      if (!name || cost <= 0) { toast('Give it a name and a cost above 0.'); return; }
+      Storage.saveShop([...myShop, { id: uid(), name, cost, description: desc }]);
+      renderShopSection(container, activeName);
+    };
+  };
+}
+
 function renderHomeTab() {
   const panel = $('#panel-home');
   const posts = Storage.getPosts();
@@ -392,6 +482,16 @@ function renderHomeTab() {
       <div class="streak-stat" style="margin:0 auto;"><div class="num">${jointStreak}</div><div class="lbl">Week${jointStreak === 1 ? '' : 's'} trained together</div></div>
     </div>` : ''}
     ${renderCompetitionCardHTML(activeName)}
+    <div class="card">
+      <div class="row" style="justify-content:space-between;align-items:center;">
+        <div>
+          <h3 style="margin-bottom:2px;">🪙 ${Storage.getTokens()} tokens</h3>
+          <div class="exercise-meta">+${Storage.getSettings().tokensPerWorkout} per workout, +${Storage.getSettings().tokensPerPR} per PR</div>
+        </div>
+        <button class="btn btn-sm" id="openShopBtn">🛍️ Shop</button>
+      </div>
+      <div id="shopSection"></div>
+    </div>
     <div class="card">
       <h3>Say something</h3>
       <textarea id="postComposer" rows="2" placeholder="Leave a note for the household…" style="resize:vertical;"></textarea>
@@ -420,6 +520,14 @@ function renderHomeTab() {
   if (editSpecialBtn) editSpecialBtn.onclick = () => {
     Storage.saveSettings({ specialDate: null });
     renderHomeTab();
+  };
+
+  $('#openShopBtn').onclick = () => {
+    const section = $('#shopSection');
+    section.innerHTML = section.innerHTML ? '' : '<div class="helper-text">Loading…</div>';
+    if (section.dataset.open === 'true') { section.innerHTML = ''; section.dataset.open = 'false'; return; }
+    section.dataset.open = 'true';
+    renderShopSection(section, activeName);
   };
 
   const renderPhotoPreview = () => {
@@ -502,7 +610,8 @@ function renderPostCard(p, activeName) {
   const card = document.createElement('div');
   const isWorkout = p.type === 'workout_complete';
   const isGift = p.type === 'gift';
-  card.className = 'card post-card' + (isGift ? ' gift-card' : '');
+  const isRedemption = p.type === 'redemption';
+  card.className = 'card post-card' + (isGift || isRedemption ? ' gift-card' : '');
   card.innerHTML = `
     <div class="post-head">
       <span class="post-avatar" style="background:${p.authorColor || 'var(--accent)'};">${(p.authorProfile || '?')[0].toUpperCase()}</span>
@@ -1006,6 +1115,11 @@ function renderTodayTab() {
       </div>
     </div>
     <div id="todayExercises"></div>
+    <div class="card" id="chirpCard" style="display:none;">
+      <label>Chirp your household (optional)</label>
+      <input id="chirpInput" placeholder="Add a message to your completion post…" maxlength="80">
+      <div class="builder-chip-group" id="chirpChips"></div>
+    </div>
     <div class="row" style="margin-top:10px;">
       <button class="btn btn-primary" id="saveSessionBtn">Save today's session</button>
       <button class="btn" id="startWorkoutModeBtn" style="display:none;">🏋️ Start Workout Mode</button>
@@ -1028,6 +1142,17 @@ function renderTodayTab() {
   }
   $('#startWorkoutModeBtn').style.display = 'inline-block';
   $('#startWorkoutModeBtn').onclick = () => enterWorkoutMode(exercises, templateDay, upcomingType, logs, settings);
+  $('#chirpCard').style.display = 'block';
+  const chirpChips = $('#chirpChips');
+  const stockChirps = ['Your turn! 💪', "Let's gooo!", 'Beat that 😏', "Don't break the streak!", 'Feeling strong today 🔥'];
+  stockChirps.forEach(c => {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'builder-chip';
+    chip.textContent = c;
+    chip.onclick = () => { $('#chirpInput').value = c; };
+    chirpChips.appendChild(chip);
+  });
 
   exercises.forEach(ex => {
     const exLogs = logsForExercise(ex.id, logs);
@@ -1113,6 +1238,7 @@ function renderTodayTab() {
   });
 
   $('#saveSessionBtn').onclick = () => {
+    const chirp = $('#chirpInput')?.value || '';
     finalizeSession(templateDay, exercises, logs, (exId) => {
       const card = list.querySelector(`.card[data-exercise-id="${exId}"]`);
       return $all('.set-row:not(.set-header)', card).map(row => ({
@@ -1120,14 +1246,14 @@ function renderTodayTab() {
         reps: Number(row.querySelector('.set-reps').value) || 0,
         rpe: Number(row.querySelector('.set-rpe').value) || 8
       }));
-    });
+    }, chirp);
     renderTodayTab();
   };
 }
 
 // Shared by the normal Today-tab save button and Live Workout Mode's finish
 // button — getSetsForExercise(exerciseId) returns that exercise's logged sets.
-function finalizeSession(templateDay, exercises, logs, getSetsForExercise) {
+function finalizeSession(templateDay, exercises, logs, getSetsForExercise, chirp) {
   const entry = { date: isoDate(), day: templateDay, exercises: [] };
   let prCount = 0;
   exercises.forEach(ex => {
@@ -1140,18 +1266,23 @@ function finalizeSession(templateDay, exercises, logs, getSetsForExercise) {
   Storage.addLog(entry);
   const { name: activeName } = Profiles.getActive();
   const settings = Storage.getSettings();
+
+  const tokensEarned = (settings.tokensPerWorkout || 10) + prCount * (settings.tokensPerPR || 15);
+  Storage.addTokens(tokensEarned, `Completed ${templateDay}'s workout${prCount > 0 ? ` + ${prCount} PR${prCount > 1 ? 's' : ''}` : ''}`);
+
   const prLine = prCount > 0 ? ` (${prCount} new PR${prCount > 1 ? 's' : ''} 🎉)` : '';
+  const chirpLine = chirp && chirp.trim() ? ` — "${chirp.trim()}"` : '';
   Storage.addPost({
     type: 'workout_complete',
     authorProfile: activeName,
     authorColor: settings.tagColor,
-    text: `completed ${templateDay}'s workout${prLine}`
+    text: `completed ${templateDay}'s workout${prLine}${chirpLine}`
   });
   toast(prCount > 0
-    ? `Session saved. <span class="pr-toast-badge">${prCount} New PR${prCount > 1 ? 's' : ''}!</span>`
-    : "Session saved — next week's targets will update from this.");
+    ? `Session saved. <span class="pr-toast-badge">${prCount} New PR${prCount > 1 ? 's' : ''}!</span> +${tokensEarned} 🪙`
+    : `Session saved. +${tokensEarned} 🪙 — next week's targets will update from this.`);
   if (prCount > 0) fireConfetti();
-  return { prCount };
+  return { prCount, tokensEarned };
 }
 
 /* ---------------- LIVE WORKOUT MODE ---------------- */
@@ -1222,6 +1353,7 @@ function renderWorkoutModeScreen(upcomingType, logs, settings) {
         <button class="btn btn-sm" id="wmRestBtn">Start rest timer</button>
       </div>
       <div id="wmRestSlot" style="text-align:center;"></div>
+      ${isLast ? `<input id="wmChirpInput" placeholder="Add a chirp for your household (optional)" maxlength="80" style="max-width:420px;margin:14px auto 0;display:block;">` : ''}
     </div>
     <div class="wm-nav">
       <button class="btn" id="wmPrevBtn" ${workoutMode.idx === 0 ? 'disabled' : ''}>← Prev</button>
@@ -1253,7 +1385,8 @@ function renderWorkoutModeScreen(upcomingType, logs, settings) {
   const finishBtn = $('#wmFinishBtn');
   if (finishBtn) finishBtn.onclick = () => {
     saveWorkoutModeCurrentSets(ex.id);
-    finalizeSession(workoutMode.templateDay, workoutMode.exercises, logs, (exId) => workoutMode.setsCache[exId]);
+    const chirp = $('#wmChirpInput')?.value || '';
+    finalizeSession(workoutMode.templateDay, workoutMode.exercises, logs, (exId) => workoutMode.setsCache[exId], chirp);
     exitWorkoutMode();
     renderTodayTab();
   };
@@ -1592,6 +1725,14 @@ function renderSettingsTab() {
       <p class="helper-text">Deload weeks automatically lighten load and volume; peak weeks suggest a heavier, low-rep top set to re-test your working max.</p>
     </div>
     <div class="card">
+      <h3>Token economy</h3>
+      <div class="row">
+        <div><label>Tokens per workout</label><input id="setTokensWorkout" type="number" min="0" value="${s.tokensPerWorkout}"></div>
+        <div><label>Bonus tokens per PR</label><input id="setTokensPR" type="number" min="0" value="${s.tokensPerPR}"></div>
+      </div>
+      <p class="helper-text">Shared rate for everyone in the household — changing it here changes it for both of you.</p>
+    </div>
+    <div class="card">
       <h3>Barbell & plates</h3>
       <div class="row">
         <div><label>Bar weight (${s.units})</label><input id="setBar" type="number" value="${s.barWeight}"></div>
@@ -1655,6 +1796,8 @@ function renderSettingsTab() {
   const save = (mut) => { const cur = Storage.getSettings(); mut(cur); Storage.saveSettings(cur); toast('Saved.'); };
   $('#setUnits').onchange = e => save(s => s.units = e.target.value);
   $('#setBw').onchange = e => save(s => s.bodyweight = Number(e.target.value) || s.bodyweight);
+  $('#setTokensWorkout').onchange = e => save(s => s.tokensPerWorkout = Math.max(0, Number(e.target.value) || 0));
+  $('#setTokensPR').onchange = e => save(s => s.tokensPerPR = Math.max(0, Number(e.target.value) || 0));
   $('#setAiEnabled').onchange = e => save(s => s.aiEnabled = e.target.value === 'true');
   $('#setAiKey').onchange = e => save(s => s.aiApiKey = e.target.value.trim());
   $('#testAiBtn').onclick = async () => {

@@ -335,18 +335,21 @@ svg text {
     -webkit-backdrop-filter: blur(10px);
     border-top: 1px solid var(--border);
     border-bottom: none;
-    justify-content: space-around;
-    padding: 10px 2px calc(10px + env(safe-area-inset-bottom, 0px));
+    justify-content: flex-start;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 10px 6px calc(10px + env(safe-area-inset-bottom, 0px));
     z-index: 20;
+    scrollbar-width: none;
   }
+  .tab-nav::-webkit-scrollbar { display: none; }
   .tab-btn {
-    padding: 10px 2px;
-    font-size: 10.5px;
-    flex: 1;
-    min-width: 0;
+    padding: 10px 16px;
+    font-size: 13px;
+    flex: 0 0 auto;
+    min-width: 68px;
     text-align: center;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .tab-panel { padding: 14px; }
   .app-header { padding: 12px 14px; padding-top: calc(12px + env(safe-area-inset-top, 0px)); }
@@ -891,6 +894,25 @@ textarea {
 }
 .competition-name { font-family: var(--font-display); font-size: 13px; flex: 1; }
 .competition-sessions { font-family: var(--font-mono); font-size: 13px; color: var(--text-dim); }
+
+/* ============================================================
+   TOKEN SHOP
+   ============================================================ */
+.shop-owner-block { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
+.shop-owner-block:first-child { margin-top: 10px; padding-top: 0; border-top: none; }
+.shop-owner-block h4 { font-family: var(--font-display); font-size: 13px; margin-bottom: 6px; }
+.shop-items { display: flex; flex-direction: column; gap: 8px; }
+.shop-item-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+}
+.shop-item-name { font-weight: 600; font-size: 13.5px; }
+.shop-item-cost { font-family: var(--font-mono); font-size: 13px; color: var(--gold); }
 
 /* ============================================================
    TROPHY CASE

@@ -125,6 +125,36 @@ maintain, they just reflect where you already are.
 side-by-side of sessions logged this calendar month, with a 🏆 next to
 whoever's ahead. Meant to be lighthearted, not a real leaderboard.
 
+## Token economy & shop
+
+Every saved workout earns tokens (10 by default, +15 more per PR — both
+adjustable in Settings → Token economy, shared rate for the household).
+Home tab shows your balance with a **🛍️ Shop** button.
+
+Each profile maintains their own shop: items *you're* offering, each with a
+name, a token cost you set, and an optional description — completely
+freeform, since this is your own private text field, same as any note in
+the app. Your partner spends tokens *they've* earned to redeem from your
+shop; redeeming never touches your data, only their own balance, and posts
+a note to Home so you see it and can follow through. Real money, gift
+cards, a chore pass, a shopping trip, whatever you two want to put in
+there — it's just text and a token cost, the app doesn't know or care what
+it says.
+
+## Chirps
+
+When you finish a workout (either from the regular Today tab or Workout
+Mode), an optional message field lets you send a note along with your
+completion post — type your own or tap a stock quick-pick ("Your turn!
+💪", "Beat that 😏", etc.) to needle your partner into their own session.
+
+## Fixed: bottom nav & font size
+
+The bottom tab bar was shrinking text to force everything to fit instead
+of scrolling — now it actually scrolls horizontally, so tab labels sit at
+a normal, readable size (13px, up from 10.5px) no matter how many tabs
+there are.
+
 ## Taylor theme + Sabrina revised
 
 Fixed the theme swatches spilling off the screen — they scroll horizontally
