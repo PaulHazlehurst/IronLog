@@ -70,6 +70,12 @@ const Sync = {
     return [...byId.values()].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)).slice(-300);
   },
 
+  mergeKeepsakes(remoteKeepsakes, localKeepsakes) {
+    const byId = new Map();
+    [...(remoteKeepsakes || []), ...(localKeepsakes || [])].forEach(k => byId.set(k.id, k));
+    return [...byId.values()].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+  },
+
   async push() {
     const device = getDeviceRaw();
     if (!device.githubToken) return { ok: false, message: 'No GitHub token set.' };
@@ -100,7 +106,8 @@ const Sync = {
         tokensPerWorkout: localShared.tokensPerWorkout ?? remoteShared?.tokensPerWorkout ?? 10,
         tokensPerPR: localShared.tokensPerPR ?? remoteShared?.tokensPerPR ?? 15,
         deletedProfiles: [...new Set([...(remoteShared?.deletedProfiles || []), ...(localShared.deletedProfiles || [])])],
-        posts: Sync.mergePosts(remoteShared?.posts, localShared.posts)
+        posts: Sync.mergePosts(remoteShared?.posts, localShared.posts),
+        keepsakes: Sync.mergeKeepsakes(remoteShared?.keepsakes, localShared.keepsakes)
       };
       saveJSON(DB.SHARED, mergedShared); // keep local in sync with the merge too
 

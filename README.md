@@ -149,6 +149,55 @@ and glances back at it (or switches away and back), she'll see it within
 about 15 seconds without doing anything. If the app's been sitting fully
 backgrounded for a while, opening it fresh syncs right away too.
 
+## Minor: fewer gist revisions during action bursts
+
+Not an urgent fix (the app's actual performance doesn't depend on gist
+revision count), but a free improvement: "immediate" pushes now have an
+800ms debounce — imperceptible as a delay, but enough to collapse a quick
+burst of actions (post a comment, react, redeem an item, all within a
+couple seconds) into one gist revision instead of three.
+
+## Bug audit — what I found and fixed
+
+Went through every file systematically rather than spot-checking:
+
+- **Real bug:** after redeeming a shop item, the code refreshed the Home
+  tab instead of the Shop tab you were actually looking at — a leftover
+  from when Shop was still embedded in Home and got missed when it moved
+  to its own tab. The screen just wouldn't update your new balance until
+  you switched tabs away and back. Fixed.
+- **Real bug:** the "yank the screen out from under an open form" issue
+  from before wasn't fully fixed — it only protected text inputs, not the
+  AI Plan Builder's clickable equipment chips, or a rest timer actively
+  counting down. Both are now protected the same way.
+- **Minor bug:** the ambient background effect (snow/petals/hearts) fully
+  reset and flickered on every background sync, even when nothing about it
+  had changed. Now only resets when the effect actually changes.
+- Bumped the offline cache version and added a missing icon file to the
+  service worker's shell list (cosmetic, doesn't affect normal use since
+  everything's network-first anyway).
+
+## New: Reasons Why
+
+A permanent shared list on Home, deliberately separate from the
+comment/activity feed — the feed is great for the moment, but things
+posted there eventually scroll away under new activity. This doesn't:
+add one line at a time, big or small, and it just sits there, always
+visible, for either of you to read whenever. You can each remove your own
+entries; neither of you can remove the other's.
+
+## Fixed: forms getting wiped out mid-typing by background sync
+
+Direct consequence of the "near-instant sync" work — background polling
+(every ~12s) would pull fresh data and immediately re-render whichever tab
+was open, including any form you were actively typing into (Shop's "Add
+item," Home's composer, "Add exercise" in Plan, etc.), since a tab
+re-render rebuilds that whole panel's HTML from scratch. Fixed: a silent
+background sync now checks whether you're actively focused in an input,
+textarea, or select, and skips the disruptive re-render if so — the fresh
+data is still saved locally either way, it just won't visually appear
+until you're done and the tab naturally re-renders on its own.
+
 ## Profile deletion — now actually propagates (real bug, now fixed)
 
 Short answer to "does deleting a profile update across both devices": it

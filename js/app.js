@@ -12,8 +12,14 @@ let state = {
 function $(sel, root = document) { return root.querySelector(sel); }
 function $all(sel, root = document) { return [...root.querySelectorAll(sel)]; }
 
+let priorityPushTimer = null;
 function pushImmediate() {
-  if (Storage.getSettings().githubToken) Sync.push();
+  if (!Storage.getSettings().githubToken) return;
+  // Short enough that no one perceives this as a delay, long enough to
+  // collapse a quick burst of actions (post, then react, then redeem, all
+  // within a couple seconds) into one gist revision instead of three.
+  clearTimeout(priorityPushTimer);
+  priorityPushTimer = setTimeout(() => Sync.push(), 800);
 }
 
 function toast(msg) {
@@ -580,7 +586,7 @@ function renderShopSection(container, activeName) {
         if (!confirm(`Redeem "${item.name}" for ${item.cost} tokens?`)) return;
         const res = Storage.redeemReward(name, item.id);
         toast(res.ok ? `Redeemed "${item.name}"! 🎁` : res.message);
-        if (res.ok) { pushImmediate(); renderHomeTab(); }
+        if (res.ok) { pushImmediate(); renderShopTab(); }
       };
       wrap.appendChild(row);
     });
@@ -647,6 +653,15 @@ function renderHomeTab() {
     <div class="card" style="text-align:center;">
       <div class="streak-stat" style="margin:0 auto;"><div class="num">${jointStreak}</div><div class="lbl">Week${jointStreak === 1 ? '' : 's'} trained together</div></div>
     </div>` : ''}
+    <div class="card">
+      <h3>💕 Reasons why</h3>
+      <p class="helper-text">A running, permanent list — unlike the feed below, nothing here ever scrolls away.</p>
+      <div class="row">
+        <input id="keepsakeInput" placeholder="One reason, big or small…" maxlength="140">
+        <button class="btn btn-sm btn-primary" id="addKeepsakeBtn" style="flex:0 0 auto;">Add</button>
+      </div>
+      <div id="keepsakeList" class="keepsake-list"></div>
+    </div>
     ${renderCompetitionCardHTML(activeName)}
     <div class="card token-teaser" id="tokenTeaser">
       <span class="coin-badge" style="width:26px;height:26px;"></span>
@@ -687,6 +702,47 @@ function renderHomeTab() {
   };
 
   $('#tokenTeaser').onclick = () => switchTab('shop');
+
+  const renderKeepsakeList = () => {
+    const listEl = $('#keepsakeList');
+    const keepsakes = Storage.getKeepsakes();
+    if (keepsakes.length === 0) {
+      listEl.innerHTML = `<p class="helper-text">Nothing yet — add the first one.</p>`;
+      return;
+    }
+    listEl.innerHTML = '';
+    keepsakes.forEach(k => {
+      const row = document.createElement('div');
+      row.className = 'keepsake-row';
+      row.innerHTML = `
+        <span class="post-avatar" style="background:${k.authorColor || 'var(--accent)'};width:20px;height:20px;font-size:9px;">${k.authorProfile ? avatarFor(k.authorProfile) : '?'}</span>
+        <span class="keepsake-text">${escapeHtml(k.text)}</span>
+        ${k.authorProfile === activeName ? '<button class="keepsake-remove" title="Remove">×</button>' : ''}
+      `;
+      const removeBtn = row.querySelector('.keepsake-remove');
+      if (removeBtn) removeBtn.onclick = () => {
+        Storage.removeKeepsake(k.id, activeName);
+        pushImmediate();
+        renderKeepsakeList();
+      };
+      listEl.appendChild(row);
+    });
+  };
+  renderKeepsakeList();
+
+  $('#addKeepsakeBtn').onclick = () => {
+    const input = $('#keepsakeInput');
+    const text = input.value.trim();
+    if (!text) return;
+    const settings = Storage.getSettings();
+    Storage.addKeepsake(text, activeName, settings.tagColor);
+    input.value = '';
+    pushImmediate();
+    renderKeepsakeList();
+  };
+  $('#keepsakeInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') $('#addKeepsakeBtn').click();
+  });
 
   const renderPhotoPreview = () => {
     const wrap = $('#photoPreviewWrap');
@@ -831,11 +887,14 @@ function fireFalling(kind) {
 }
 
 let ambientInterval = null;
+let currentAmbientEffect = null;
 function applyAmbientEffect() {
-  clearInterval(ambientInterval);
-  document.querySelectorAll('.ambient-particle').forEach(el => el.remove());
   const s = Storage.getSettings();
   const effect = s.ambientEffect || 'none';
+  if (effect === currentAmbientEffect) return; // nothing changed, don't flicker existing particles
+  currentAmbientEffect = effect;
+  clearInterval(ambientInterval);
+  document.querySelectorAll('.ambient-particle').forEach(el => el.remove());
   if (effect === 'none') return;
   const symbol = effect === 'snow' ? '❄️' : effect === 'petals' ? '🌸' : '❤️';
   ambientInterval = setInterval(() => {
@@ -1476,6 +1535,13 @@ function releaseWakeLock() {
   if (wakeLockSentinel) { wakeLockSentinel.release().catch(() => {}); wakeLockSentinel = null; }
 }
 let lastAutoSyncCheck = 0;
+function hasOpenTransientForm() {
+  return ['addShopItemForm', 'planBuilderForm', 'addExerciseForm'].some(id => {
+    const el = document.getElementById(id);
+    return el && el.innerHTML.trim() !== '';
+  });
+}
+
 async function syncNow(silent) {
   const s = Storage.getSettings();
   if (!s.githubToken) return;
@@ -1489,7 +1555,15 @@ async function syncNow(silent) {
       applyTheme();
       renderProfileButton();
       checkForNewActivity();
-      renderActiveTab();
+      // A silent background sync shouldn't yank the screen out from under
+      // someone mid-typing into a form (e.g. adding a shop item), or reset
+      // a rest timer that's actively counting down between sets — the
+      // fresh data is already saved locally either way, it'll just show up
+      // next time this tab naturally re-renders instead of right this second.
+      const activeEl = document.activeElement;
+      const isTyping = activeEl && ['INPUT', 'TEXTAREA', 'SELECT'].includes(activeEl.tagName);
+      const hasRunningTimer = !!document.querySelector('#restCountdown');
+      if (!silent || !(isTyping || hasRunningTimer || hasOpenTransientForm())) renderActiveTab();
     }
   }
 }

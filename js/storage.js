@@ -82,7 +82,7 @@ function defaultProfile() {
     shop: []
   };
 }
-function defaultShared() { return { posts: [], specialDate: null, tokensPerWorkout: 10, tokensPerPR: 15, deletedProfiles: [] }; }
+function defaultShared() { return { posts: [], specialDate: null, tokensPerWorkout: 10, tokensPerPR: 15, deletedProfiles: [], keepsakes: [] }; }
 function defaultDevice() { return { githubToken: '', githubGistId: '', githubLastSync: null, activeProfile: '', lastSeenPostsAtByProfile: {}, lastNotifiedAtByProfile: {}, aiProvider: 'gemini', aiApiKey: '', aiEnabled: false }; }
 
 const PROFILE_SETTING_KEYS = ['units', 'bodyweight', 'gender', 'barWeight', 'availablePlates', 'restTimerSound', 'manualLifts', 'theme', 'tagColor', 'fontStyle', 'ambientEffect', 'themesTried', 'avatarEmoji'];
@@ -437,6 +437,30 @@ const Storage = {
     saveJSON(DB.SHARED, shared);
     notifyChanged();
   },
+
+  // "Reasons Why" — a permanent shared keepsake list, distinct from the
+  // scrolling Home feed where things eventually get buried. Append-only in
+  // spirit (deletion of your own entries is allowed, nothing else is).
+  getKeepsakes() {
+    const shared = { ...defaultShared(), ...loadJSON(DB.SHARED, {}) };
+    return (shared.keepsakes || []).slice().sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  },
+  addKeepsake(text, authorProfile, authorColor) {
+    const shared = { ...defaultShared(), ...loadJSON(DB.SHARED, {}) };
+    shared.keepsakes = [...(shared.keepsakes || []), { id: uid(), text, authorProfile, authorColor, createdAt: new Date().toISOString() }];
+    saveJSON(DB.SHARED, shared);
+    notifyChanged();
+  },
+  removeKeepsake(id, requesterProfile) {
+    const shared = { ...defaultShared(), ...loadJSON(DB.SHARED, {}) };
+    const entry = (shared.keepsakes || []).find(k => k.id === id);
+    if (!entry || entry.authorProfile !== requesterProfile) return false;
+    shared.keepsakes = shared.keepsakes.filter(k => k.id !== id);
+    saveJSON(DB.SHARED, shared);
+    notifyChanged();
+    return true;
+  },
+
   getLastSeenPostsAt(profileName) { return getDeviceRaw().lastSeenPostsAtByProfile?.[profileName] || null; },
   setLastSeenPostsAt(profileName, iso) {
     const d = getDeviceRaw();

@@ -8,7 +8,7 @@
    time you want to force every device to drop old cached files.
    ============================================================ */
 
-const CACHE_VERSION = 'iron-log-v3';
+const CACHE_VERSION = 'iron-log-v4';
 const APP_SHELL = [
   './',
   './index.html',
@@ -27,7 +27,8 @@ const APP_SHELL = [
   './js/app.js',
   './icons/icon-192.png',
   './icons/icon-512.png',
-  './icons/apple-touch-icon.png'
+  './icons/apple-touch-icon.png',
+  './icons/favicon-32.png'
 ];
 
 self.addEventListener('install', (event) => {
