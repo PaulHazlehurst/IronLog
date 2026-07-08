@@ -23,6 +23,7 @@ function toast(msg) {
 function fireConfetti() {
   const theme = document.documentElement.dataset.theme;
   if (theme === 'sabrina') { fireFalling('sabrina-pr'); return; }
+  if (theme === 'taylor') { fireFalling('taylor-pr'); return; }
   const colors = ['#4C8DFF', '#F0559C', '#2FD4C0', '#FFA94D', '#8B7CF6', '#4ADE80'];
   const count = 24;
   for (let i = 0; i < count; i++) {
@@ -150,7 +151,7 @@ function renderProfilePanel() {
   };
   const swatchWrap = $('#themeSwatches');
   if (swatchWrap) {
-    const swatchColors = { iron: '#4C8DFF', pink: '#F0559C', night: '#7B8794', sunset: '#FF6B4A', neon: '#B14CFF', forest: '#5EBF63', holiday: '#E0483F', winter: '#6FC3E8', sabrina: '#E63950' };
+    const swatchColors = { iron: '#4C8DFF', pink: '#F0559C', night: '#7B8794', sunset: '#FF6B4A', neon: '#B14CFF', forest: '#5EBF63', holiday: '#E0483F', winter: '#6FC3E8', sabrina: '#C81F3C', taylor: '#C9A227' };
     THEMES.forEach(t => {
       const sw = document.createElement('div');
       sw.className = 'theme-swatch' + (settings.theme === t ? ' active' : '');
@@ -527,7 +528,8 @@ function renderPostCard(p, activeName) {
 function fireFalling(kind) {
   const symbolSets = {
     rose: ['🌹'], flowers: ['💐', '🌷', '🌼', '🌸'], heart: ['❤️', '💕', '💖'],
-    'sabrina-pr': ['🎀', '⭐', '💗', '✨']
+    'sabrina-pr': ['🎀', '⭐', '💗', '✨'],
+    'taylor-pr': ['⭐', '✨', '🏆']
   };
   const symbols = symbolSets[kind] || ['🌸'];
   const count = 22;

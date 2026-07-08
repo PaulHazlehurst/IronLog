@@ -137,28 +137,46 @@
   --bg: #FBEAEC;
   --surface: #FFF4F5;
   --surface-2: #FCE1E6;
-  --border: #F3C2CC;
-  --text: #5A2432;
-  --text-dim: #A97183;
-  --accent: #E63950;
+  --border: #E9B9C4;
+  --text: #4A1E29;
+  --text-dim: #936773;
+  --accent: #C81F3C;
   --accent-ink: #ffffff;
-  --blue: #C9932E;
-  --amber: #E0A83D;
-  --success: #4FAE7A;
-  --gold: #D4AF37;
-  --radius: 22px;
-  --radius-sm: 16px;
+  --blue: #A67C1E;
+  --amber: #C98A2C;
+  --success: #3E8F63;
+  --gold: #B8912E;
+  --radius: 12px;
+  --radius-sm: 8px;
 }
-[data-theme="sabrina"] .app-header {
-  background-image: repeating-linear-gradient(45deg, rgba(230,57,80,0.05) 0 10px, transparent 10px 20px);
-}
-[data-theme="sabrina"] .app-header h1::before { content: "🎀 "; }
 [data-theme="sabrina"] .card {
-  border-style: dashed;
-  border-width: 2px;
+  border-top: 3px solid var(--gold);
 }
 [data-theme="sabrina"] .btn-primary {
-  box-shadow: 0 2px 0 rgba(90,36,50,0.15);
+  box-shadow: 0 1px 0 rgba(74,30,41,0.2);
+}
+
+[data-theme="taylor"] {
+  --bg: #1B1013;
+  --surface: #241318;
+  --surface-2: #2E1920;
+  --border: #4A2530;
+  --text: #F3E7D9;
+  --text-dim: #B79A8C;
+  --accent: #C9A227;
+  --accent-ink: #1B1013;
+  --blue: #A65D6E;
+  --amber: #D9A441;
+  --success: #7FAE7A;
+  --gold: #C9A227;
+  --radius: 10px;
+  --radius-sm: 7px;
+}
+[data-theme="taylor"] .card {
+  border-top: 1px solid var(--gold);
+}
+[data-theme="taylor"] .btn-primary {
+  letter-spacing: 0.03em;
 }
 
 /* ---------------- FONT VARIANTS ---------------- */

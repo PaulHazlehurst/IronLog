@@ -125,13 +125,21 @@ maintain, they just reflect where you already are.
 side-by-side of sessions logged this calendar month, with a 🏆 next to
 whoever's ahead. Meant to be lighthearted, not a real leaderboard.
 
-## Sabrina theme + scrollable theme picker
+## Taylor theme + Sabrina revised
 
-Fixed the theme swatches spilling off the screen — they scroll
-horizontally now instead of overflowing. Also added a 9th theme, **Sabrina**
-— a glam/coquette look (blush pink, cherry red, gold, extra-rounded
-corners, a bow on the wordmark, dashed "frilly" card borders). It's a name
-and a vibe, not built from any real person's actual photos or likeness.
+Fixed the theme swatches spilling off the screen — they scroll horizontally
+now instead of overflowing.
+
+Sabrina got a redesign: same rose/cherry/gold identity, but the dashed
+borders, gingham header pattern, and bow emoji are gone in favor of a crisp
+gold top-border accent and sharper corners — reads more like a fashion
+editorial now than a party invite.
+
+New **Taylor** theme: deep garnet/black background, warm ivory text,
+antique gold accent, dusty rose secondary — a "quiet luxury" palette,
+restrained corners, minimal ornamentation. Same rule as Sabrina: a name and
+a color story I designed, not built from any real photos or specific looks.
+Both get their own gold/star celebration animation on a new PR.
 
 ## Critical fix: AI key was being auto-revoked by Google (read this first)
 

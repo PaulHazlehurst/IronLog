@@ -25,7 +25,7 @@ const DB = {
 };
 
 const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
-const THEMES = ['iron', 'pink', 'night', 'sunset', 'neon', 'forest', 'holiday', 'winter', 'sabrina'];
+const THEMES = ['iron', 'pink', 'night', 'sunset', 'neon', 'forest', 'holiday', 'winter', 'sabrina', 'taylor'];
 const FONT_STYLES = ['modern', 'playful', 'classic'];
 
 function loadJSON(key, fallback) {
