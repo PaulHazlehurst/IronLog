@@ -82,8 +82,8 @@ function defaultProfile() {
     shop: []
   };
 }
-function defaultShared() { return { posts: [], specialDate: null, tokensPerWorkout: 10, tokensPerPR: 15 }; }
-function defaultDevice() { return { githubToken: '', githubGistId: '', githubLastSync: null, activeProfile: '', lastSeenPostsAtByProfile: {}, aiProvider: 'gemini', aiApiKey: '', aiEnabled: false }; }
+function defaultShared() { return { posts: [], specialDate: null, tokensPerWorkout: 10, tokensPerPR: 15, deletedProfiles: [] }; }
+function defaultDevice() { return { githubToken: '', githubGistId: '', githubLastSync: null, activeProfile: '', lastSeenPostsAtByProfile: {}, lastNotifiedAtByProfile: {}, aiProvider: 'gemini', aiApiKey: '', aiEnabled: false }; }
 
 const PROFILE_SETTING_KEYS = ['units', 'bodyweight', 'gender', 'barWeight', 'availablePlates', 'restTimerSound', 'manualLifts', 'theme', 'tagColor', 'fontStyle', 'ambientEffect', 'themesTried', 'avatarEmoji'];
 const SHARED_SETTING_KEYS = ['specialDate', 'tokensPerWorkout', 'tokensPerPR'];
@@ -166,6 +166,9 @@ const Profiles = {
     profiles[newName] = profiles[oldName];
     delete profiles[oldName];
     saveAllProfilesRaw(profiles);
+    const shared = { ...defaultShared(), ...loadJSON(DB.SHARED, {}) };
+    shared.deletedProfiles = [...new Set([...(shared.deletedProfiles || []), oldName])];
+    saveJSON(DB.SHARED, shared);
     if (Profiles.activeName() === oldName) Profiles.setActive(newName);
     notifyChanged();
     return true;
@@ -176,6 +179,9 @@ const Profiles = {
     if (!profiles[name] || Profiles.list().length <= 1) return false;
     delete profiles[name];
     saveAllProfilesRaw(profiles);
+    const shared = { ...defaultShared(), ...loadJSON(DB.SHARED, {}) };
+    shared.deletedProfiles = [...new Set([...(shared.deletedProfiles || []), name])];
+    saveJSON(DB.SHARED, shared);
     if (Profiles.activeName() === name) Profiles.setActive(Object.keys(profiles)[0]);
     notifyChanged();
     return true;
@@ -436,6 +442,16 @@ const Storage = {
     const d = getDeviceRaw();
     d.lastSeenPostsAtByProfile = d.lastSeenPostsAtByProfile || {};
     d.lastSeenPostsAtByProfile[profileName] = iso;
+    saveDeviceRaw(d);
+  },
+  // Separate from lastSeenPostsAt (which tracks opening Home) — this tracks
+  // what's already triggered a push notification, so background polling
+  // doesn't re-notify about the same post every time it checks.
+  getLastNotifiedAt(profileName) { return getDeviceRaw().lastNotifiedAtByProfile?.[profileName] || null; },
+  setLastNotifiedAt(profileName, iso) {
+    const d = getDeviceRaw();
+    d.lastNotifiedAtByProfile = d.lastNotifiedAtByProfile || {};
+    d.lastNotifiedAtByProfile[profileName] = iso;
     saveDeviceRaw(d);
   },
 

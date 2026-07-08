@@ -12,6 +12,10 @@ let state = {
 function $(sel, root = document) { return root.querySelector(sel); }
 function $all(sel, root = document) { return [...root.querySelectorAll(sel)]; }
 
+function pushImmediate() {
+  if (Storage.getSettings().githubToken) Sync.push();
+}
+
 function toast(msg) {
   const el = $('#toast');
   el.innerHTML = msg;
@@ -110,6 +114,21 @@ function renderProfilePanel() {
       toast(`Switched to ${n}.`);
     };
     row.appendChild(b);
+    if (n === activeName) {
+      const rename = document.createElement('button');
+      rename.className = 'btn btn-sm';
+      rename.textContent = '✏️';
+      rename.title = `Rename ${n}`;
+      rename.style.flex = '0 0 auto';
+      rename.onclick = () => {
+        const newName = prompt(`Rename "${n}" to:`, n);
+        if (!newName || !newName.trim() || newName.trim() === n) return;
+        const ok = Profiles.rename(n, newName.trim());
+        if (ok) { pushImmediate(); applyTheme(); renderProfileButton(); renderActiveTab(); renderProfilePanel(); toast(`Renamed to "${newName.trim()}".`); }
+        else toast("Couldn't rename — that name may already be taken.");
+      };
+      row.appendChild(rename);
+    }
     if (names.length > 1) {
       const del = document.createElement('button');
       del.className = 'btn btn-sm btn-danger';
@@ -122,6 +141,7 @@ function renderProfilePanel() {
         const ok = Profiles.delete(n);
         if (ok) {
           toast(`Deleted "${n}".`);
+          pushImmediate();
           if (wasActive) { applyTheme(); renderProfileButton(); renderActiveTab(); }
           renderProfilePanel();
         } else {
@@ -143,6 +163,7 @@ function renderProfilePanel() {
       $('#profilePanel').style.display = 'none';
       renderActiveTab();
       toast(`Created profile "${name}".`);
+      pushImmediate();
     } else {
       toast('That name is taken — try another.');
     }
@@ -512,6 +533,7 @@ function spinRoulette() {
     wagerInput.value = Math.min(Number(wagerInput.value) || 10, Math.max(1, newBalance));
     wagerInput.disabled = newBalance < 1;
     spinBtn.disabled = newBalance < 1;
+    pushImmediate();
   }, 3600);
 }
 
@@ -558,7 +580,7 @@ function renderShopSection(container, activeName) {
         if (!confirm(`Redeem "${item.name}" for ${item.cost} tokens?`)) return;
         const res = Storage.redeemReward(name, item.id);
         toast(res.ok ? `Redeemed "${item.name}"! 🎁` : res.message);
-        if (res.ok) renderHomeTab();
+        if (res.ok) { pushImmediate(); renderHomeTab(); }
       };
       wrap.appendChild(row);
     });
@@ -580,6 +602,7 @@ function renderShopSection(container, activeName) {
       `;
       row.querySelector('button').onclick = () => {
         Storage.saveShop(myShop.filter(i => i.id !== item.id));
+        pushImmediate();
         renderShopSection(container, activeName);
       };
       myWrap.appendChild(row);
@@ -602,6 +625,7 @@ function renderShopSection(container, activeName) {
       const desc = $('#newItemDesc', formEl).value.trim();
       if (!name || cost <= 0) { toast('Give it a name and a cost above 0.'); return; }
       Storage.saveShop([...myShop, { id: uid(), name, cost, description: desc }]);
+      pushImmediate();
       renderShopSection(container, activeName);
     };
   };
@@ -652,11 +676,13 @@ function renderHomeTab() {
     const val = $('#specialDateInput').value;
     if (!val) { toast('Pick a date first.'); return; }
     Storage.saveSettings({ specialDate: val });
+    pushImmediate();
     renderHomeTab();
   };
   const editSpecialBtn = $('#editSpecialDateBtn');
   if (editSpecialBtn) editSpecialBtn.onclick = () => {
     Storage.saveSettings({ specialDate: null });
+    pushImmediate();
     renderHomeTab();
   };
 
@@ -690,6 +716,7 @@ function renderHomeTab() {
     const settings = Storage.getSettings();
     Storage.addPost({ type: 'comment', authorProfile: activeName, authorColor: settings.tagColor, text, photoDataUrl: pendingPhotoDataUrl || null });
     pendingPhotoDataUrl = null;
+    pushImmediate();
     renderHomeTab();
   };
 
@@ -705,6 +732,7 @@ function renderHomeTab() {
       });
       fireFalling(key);
       toast(`${gift.emoji} Sent!`);
+      pushImmediate();
       renderHomeTab();
     };
   });
@@ -718,12 +746,14 @@ function renderHomeTab() {
     });
     fireFalling('heart');
     toast('💌 Sent!');
+    pushImmediate();
     renderHomeTab();
   };
 
   const notifBtn = $('#enableNotifBtn');
   if (notifBtn) notifBtn.onclick = async () => {
     const perm = await Notification.requestPermission();
+    if (perm === 'granted') Storage.setLastNotifiedAt(activeName, new Date().toISOString());
     toast(perm === 'granted' ? 'Notifications enabled on this device.' : 'Notifications not enabled.');
     renderHomeTab();
   };
@@ -773,7 +803,7 @@ function renderPostCard(p, activeName) {
     const btn = document.createElement('button');
     btn.className = 'reaction-chip' + (users.includes(activeName) ? ' active' : '');
     btn.textContent = `${emoji}${users.length ? ' ' + users.length : ''}`;
-    btn.onclick = () => { Storage.toggleReaction(p.id, emoji, activeName); renderHomeTab(); };
+    btn.onclick = () => { Storage.toggleReaction(p.id, emoji, activeName); pushImmediate(); renderHomeTab(); };
     reactWrap.appendChild(btn);
   });
   return card;
@@ -830,9 +860,9 @@ function escapeHtml(str) {
 function checkForNewActivity() {
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
   const { name: activeName } = Profiles.getActive();
-  const lastSeen = Storage.getLastSeenPostsAt(activeName);
+  const lastNotified = Storage.getLastNotifiedAt(activeName);
   const posts = Storage.getPosts();
-  const fresh = posts.filter(p => p.authorProfile !== activeName && (!lastSeen || new Date(p.createdAt) > new Date(lastSeen)));
+  const fresh = posts.filter(p => p.authorProfile !== activeName && (!lastNotified || new Date(p.createdAt) > new Date(lastNotified)));
   if (fresh.length === 0) return;
   const body = fresh.length === 1
     ? (fresh[0].giftType ? `${GIFT_TYPES[fresh[0].giftType]?.emoji || '🎁'} ${fresh[0].authorProfile} ${fresh[0].text}` : `${fresh[0].authorProfile}: ${fresh[0].text}`)
@@ -842,6 +872,8 @@ function checkForNewActivity() {
   } else {
     new Notification('Iron Log', { body });
   }
+  const newest = fresh.reduce((a, p) => (new Date(p.createdAt) > new Date(a) ? p.createdAt : a), fresh[0].createdAt);
+  Storage.setLastNotifiedAt(activeName, newest);
 }
 
 function renderPlanTab() {
@@ -1427,6 +1459,7 @@ function finalizeSession(templateDay, exercises, logs, getSetsForExercise, chirp
     ? `Session saved. <span class="pr-toast-badge">${prCount} New PR${prCount > 1 ? 's' : ''}!</span> +${tokensEarned} <span class="coin-badge" style="width:13px;height:13px;"></span>`
     : `Session saved. +${tokensEarned} <span class="coin-badge" style="width:13px;height:13px;"></span> — next week's targets will update from this.`);
   if (prCount > 0) fireConfetti();
+  pushImmediate();
   return { prCount, tokensEarned };
 }
 
@@ -1442,9 +1475,45 @@ async function requestWakeLock() {
 function releaseWakeLock() {
   if (wakeLockSentinel) { wakeLockSentinel.release().catch(() => {}); wakeLockSentinel = null; }
 }
+let lastAutoSyncCheck = 0;
+async function syncNow(silent) {
+  const s = Storage.getSettings();
+  if (!s.githubToken) return;
+  if (Sync.hasPendingLocalChanges()) {
+    if (!silent) toast('Pushing unsynced changes to GitHub…');
+    await Sync.push();
+  } else {
+    if (!silent) toast('Checking GitHub for updates…');
+    const res = await Sync.pull();
+    if (res.ok) {
+      applyTheme();
+      renderProfileButton();
+      checkForNewActivity();
+      renderActiveTab();
+    }
+  }
+}
+
+// Shared throttle so the visibility-change trigger and the periodic timer
+// below don't double up on the same short window.
+function maybeAutoSync() {
+  if (!Storage.hasAnyProfile() || document.visibilityState !== 'visible') return;
+  const now = Date.now();
+  if (now - lastAutoSyncCheck < 6000) return;
+  lastAutoSyncCheck = now;
+  syncNow(true);
+}
+
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && $('#workoutModeOverlay')) requestWakeLock();
+  if (document.visibilityState !== 'visible') return;
+  if ($('#workoutModeOverlay')) requestWakeLock();
+  maybeAutoSync();
 });
+
+// While the app is open and visible, quietly check for updates every so
+// often — this is what gets a partner's change to show up without needing
+// to background/foreground the app or force-quit and reopen it.
+setInterval(maybeAutoSync, 12000);
 
 function enterWorkoutMode(exercises, templateDay, upcomingType, logs, settings) {
   workoutMode = { idx: 0, exercises, templateDay, setsCache: {} };
@@ -2089,16 +2158,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     $('#profilePanel').style.display = 'block';
   }
 
-  const s = Storage.getSettings();
-  if (s.githubToken) {
-    if (Sync.hasPendingLocalChanges()) {
-      toast('Pushing unsynced changes to GitHub…');
-      await Sync.push();
-    } else {
-      toast('Checking GitHub for updates…');
-      const res = await Sync.pull();
-      if (res.ok) { toast('Synced from GitHub.'); applyTheme(); renderProfileButton(); checkForNewActivity(); }
-    }
-  }
+  lastAutoSyncCheck = Date.now();
+  await syncNow(false);
   if (Storage.hasAnyProfile()) switchTab('home');
 });

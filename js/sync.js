@@ -97,6 +97,9 @@ const Sync = {
       const localShared = { ...defaultShared(), ...loadJSON(DB.SHARED, {}) };
       const mergedShared = {
         specialDate: localShared.specialDate || remoteShared?.specialDate || null,
+        tokensPerWorkout: localShared.tokensPerWorkout ?? remoteShared?.tokensPerWorkout ?? 10,
+        tokensPerPR: localShared.tokensPerPR ?? remoteShared?.tokensPerPR ?? 15,
+        deletedProfiles: [...new Set([...(remoteShared?.deletedProfiles || []), ...(localShared.deletedProfiles || [])])],
         posts: Sync.mergePosts(remoteShared?.posts, localShared.posts)
       };
       saveJSON(DB.SHARED, mergedShared); // keep local in sync with the merge too
@@ -110,6 +113,12 @@ const Sync = {
       // it may contain a previously-synced AI key from before this was fixed.
       // Setting a file's content to null deletes it from the gist entirely.
       if (existingGist?.files?.[LEGACY_FILENAME]) files[LEGACY_FILENAME] = null;
+      // Actually remove any deleted profile's file from the gist, so it can't
+      // get resurrected by a future pull merging in a stale remote copy.
+      mergedShared.deletedProfiles.forEach(deletedName => {
+        const fname = slugForProfile(deletedName);
+        if (existingGist?.files?.[fname]) files[fname] = null;
+      });
 
       let res;
       if (gistId) {
@@ -156,6 +165,17 @@ const Sync = {
 
       const profileFiles = Object.keys(files).filter(f => f.startsWith('profile__'));
       if (profileFiles.length > 0) {
+        // Read shared.json first so we know which profiles have been deleted —
+        // a tombstone wins over both local and remote copies of that profile.
+        const sharedContent = files[SHARED_FILENAME]?.content;
+        let parsedShared = null;
+        if (sharedContent) {
+          parsedShared = JSON.parse(sharedContent);
+          delete parsedShared.aiApiKey; delete parsedShared.aiProvider; delete parsedShared.aiEnabled;
+          saveJSON(DB.SHARED, parsedShared);
+        }
+        const tombstones = new Set(parsedShared?.deletedProfiles || []);
+
         // Current, multi-file format — start from local so any profile that
         // hasn't been pushed yet survives, then overlay the fresh remote
         // copy for every profile that does exist on GitHub.
@@ -166,13 +186,9 @@ const Sync = {
             if (parsed?.name && parsed?.data) merged[parsed.name] = parsed.data;
           } catch (e) { console.error('Skipping unreadable profile file', fname, e); }
         });
-        saveAllProfilesRaw(merged);
-        const sharedContent = files[SHARED_FILENAME]?.content;
-        if (sharedContent) {
-          const parsedShared = JSON.parse(sharedContent);
-          delete parsedShared.aiApiKey; delete parsedShared.aiProvider; delete parsedShared.aiEnabled;
-          saveJSON(DB.SHARED, parsedShared);
-        }
+        tombstones.forEach(name => delete merged[name]);
+        // Never end up with zero profiles from a stale/conflicting tombstone.
+        if (Object.keys(merged).length > 0) saveAllProfilesRaw(merged);
       } else if (files[LEGACY_FILENAME]) {
         // One-time read of the old single-blob format; next push migrates it
         // forward and deletes this file. Strip any AI key it may still hold —
@@ -258,7 +274,7 @@ const Sync = {
     const device = getDeviceRaw();
     if (!device.githubToken) return;
     clearTimeout(Sync.pushTimer);
-    Sync.pushTimer = setTimeout(() => { Sync.push(); }, 2000);
+    Sync.pushTimer = setTimeout(() => { Sync.push(); }, 1000);
   }
 };
 

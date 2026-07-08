@@ -125,6 +125,77 @@ maintain, they just reflect where you already are.
 side-by-side of sessions logged this calendar month, with a 🏆 next to
 whoever's ahead. Meant to be lighthearted, not a real leaderboard.
 
+## How fast does sync actually happen?
+
+**Short answer: not instant, but now automatic in more situations than before.**
+
+When you change something (add a shop item, log a workout, etc.), your own
+device pushes it to GitHub after a short debounce (~2 seconds) so rapid
+changes batch into one upload rather than spamming requests.
+
+The other person's device picks it up:
+- Automatically, whenever they bring the app back to the foreground (switch
+  back to it, unlock the phone with it already open, etc.) — this was
+  actually missing until this update; previously a sync only ran once, on
+  a full cold load, which for a PWA that mostly just gets backgrounded
+  rather than fully closed meant real delays. Fixed now, throttled to at
+  most once every 15 seconds so flipping between apps rapidly doesn't
+  hammer GitHub's API.
+- Immediately if they force-quit and reopen the app.
+- On demand via **Settings → Pull latest**.
+
+So in practice: add something to your shop, and if she has the app open
+and glances back at it (or switches away and back), she'll see it within
+about 15 seconds without doing anything. If the app's been sitting fully
+backgrounded for a while, opening it fresh syncs right away too.
+
+## Profile deletion — now actually propagates (real bug, now fixed)
+
+Short answer to "does deleting a profile update across both devices": it
+does now — it didn't reliably before. The bug: deleting a profile only
+ever removed it from *your* local storage. The next sync would rebuild the
+profile list from whatever files still existed on GitHub, and since the
+deleted profile's file was never actually removed from the Gist, it would
+get **resurrected** — on your own device on a later sync, or on hers.
+
+Fixed with a proper tombstone system: deleting (or renaming) a profile now
+records that name in a small shared "deleted" list that travels with every
+sync, and the next push explicitly deletes that profile's file from the
+Gist. A pull now checks this list and won't let a stale remote copy bring
+a deleted profile back, regardless of which device does the deleting.
+
+Also added while I was in there: profiles couldn't actually be renamed —
+the underlying function existed but nothing in the UI called it. Fixed;
+✏️ next to your own profile in the profile panel.
+
+## Syncing — now much closer to instant
+
+Two changes:
+
+1. **Discrete actions push immediately** instead of waiting on the normal
+   debounce — posting, sending a gift/appreciation, reacting, redeeming or
+   adding a shop item, finishing a workout, spinning roulette, creating/
+   renaming/deleting a profile, setting the special date. These all now
+   fire a push right away.
+2. **Background polling while the app is open** — previously, sync only
+   ever ran once on a cold app load. Now it also runs automatically every
+   ~12 seconds while the app is visible, and immediately (throttled to
+   once per 6 seconds) whenever you switch back to the app. Combined with
+   faster debouncing on everything else (1 second instead of 2), most
+   changes now show up for the other person within a few seconds without
+   either of you doing anything.
+
+**Also fixed a repeat-notification bug** this surfaced: with background
+polling now running, a not-yet-opened notification would previously have
+fired again on every single poll instead of once. Notifications now track
+what's already been alerted separately from what's been viewed in the
+feed, so you get exactly one push per new thing.
+
+**One more real bug caught in this pass:** custom token-economy rates
+(tokens per workout/PR) were silently getting dropped on every sync and
+reset to the defaults — the sync merge logic just didn't include those two
+fields. Fixed.
+
 ## Shop is now its own tab, with a coin design and a roulette game
 
 **Coin icon** — tokens now show as a custom gold coin badge (CSS-drawn,
