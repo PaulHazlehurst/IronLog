@@ -6,7 +6,10 @@ let state = {
   activeTab: 'home',
   planDay: weekdayName(isoDate()),
   progressExerciseId: null,
-  restTimers: {}
+  restTimers: {},
+  shopViewing: null,
+  shopCategory: 'all',
+  shopCardIndex: 0
 };
 
 function $(sel, root = document) { return root.querySelector(sel); }
@@ -545,96 +548,190 @@ function spinRoulette() {
 
 function panelShopEl() { return $('#panel-shop'); }
 
+const SHOP_CATEGORIES = {
+  tried: 'Have you ever tried this one?',
+  dating: 'The Dating Game',
+  shopping: 'Shopping Spree',
+  anything: 'Anything For You'
+};
+const SHOP_ICONS = ['🎁', '💐', '🌹', '🍽️', '🎬', '💰', '🛍️', '✨', '🎉', '💎', '🏖️', '☕', '🍷', '🎮', '💆', '🚗', '🎂', '🍫', '📖', '🎵'];
+
 function renderShopSection(container, activeName) {
   const profiles = getAllProfilesRaw();
   const otherNames = Object.keys(profiles).filter(n => n !== activeName);
-  const myShop = Storage.getShop(activeName);
+
+  // Which shop are we looking at — defaults to a partner's if one exists.
+  if (!state.shopViewing || !profiles[state.shopViewing]) {
+    state.shopViewing = otherNames[0] || activeName;
+  }
+  const isOwnShop = state.shopViewing === activeName;
+  const items = Storage.getShop(state.shopViewing);
+  state.shopCategory = state.shopCategory || 'all';
+
+  const filtered = state.shopCategory === 'all' ? items : items.filter(i => (i.category || 'anything') === state.shopCategory);
+  if (state.shopCardIndex === undefined || state.shopCardIndex >= filtered.length) state.shopCardIndex = 0;
+  if (state.shopCardIndex < 0) state.shopCardIndex = 0;
 
   container.innerHTML = `
-    ${otherNames.map((name, i) => `
-      <div class="shop-owner-block">
-        <h4>${escapeHtml(name)}'s shop</h4>
-        <div class="shop-items" id="shopItems-${i}"></div>
-      </div>
-    `).join('')}
-    <div class="shop-owner-block">
-      <div class="row" style="justify-content:space-between;align-items:center;">
-        <h4>My shop</h4>
-        <button class="btn btn-sm" id="addShopItemBtn">+ Add item</button>
-      </div>
-      <p class="helper-text">Items you're offering — your partner spends their own tokens to redeem these.</p>
-      <div class="shop-items" id="myShopItems"></div>
-      <div id="addShopItemForm"></div>
+    <div class="shop-switcher">
+      <button class="btn btn-sm${isOwnShop ? ' active' : ''}" data-shop-target="${escapeHtml(activeName)}">My Shop</button>
+      ${otherNames.map(n => `<button class="btn btn-sm${state.shopViewing === n ? ' active' : ''}" data-shop-target="${escapeHtml(n)}">${escapeHtml(n)}'s Shop</button>`).join('')}
     </div>
+    ${isOwnShop ? `<p class="helper-text">Items you're offering — your partner spends their own tokens to redeem these.</p>` : `<p class="helper-text">Spend your own tokens to redeem from ${escapeHtml(state.shopViewing)}'s shop.</p>`}
+    <div class="shop-category-filter">
+      <button class="builder-chip${state.shopCategory === 'all' ? ' selected' : ''}" data-cat="all">All</button>
+      ${Object.entries(SHOP_CATEGORIES).map(([key, label]) => `<button class="builder-chip${state.shopCategory === key ? ' selected' : ''}" data-cat="${key}">${label}</button>`).join('')}
+    </div>
+    <div id="shopCardArea"></div>
+    ${isOwnShop ? `<button class="btn btn-primary btn-sm" id="addShopItemBtn" style="margin-top:12px;">+ Add item</button>` : ''}
+    <div id="addShopItemForm"></div>
   `;
 
-  otherNames.forEach((name, i) => {
-    const wrap = $(`#shopItems-${i}`, container);
-    const items = Storage.getShop(name);
-    if (items.length === 0) { wrap.innerHTML = '<p class="helper-text">No items yet.</p>'; return; }
-    items.forEach(item => {
-      const row = document.createElement('div');
-      row.className = 'shop-item-row';
-      row.innerHTML = `
-        <div><div class="shop-item-name">${escapeHtml(item.name)}</div>${item.description ? `<div class="exercise-meta">${escapeHtml(item.description)}</div>` : ''}</div>
-        <div class="row" style="flex:0 0 auto;">
-          <span class="shop-item-cost"><span class="coin-badge" style="width:13px;height:13px;"></span> ${item.cost}</span>
-          <button class="btn btn-sm">Redeem</button>
-        </div>
-      `;
-      row.querySelector('button').onclick = () => {
-        if (!confirm(`Redeem "${item.name}" for ${item.cost} tokens?`)) return;
-        const res = Storage.redeemReward(name, item.id);
-        toast(res.ok ? `Redeemed "${item.name}"! 🎁` : res.message);
-        if (res.ok) { pushImmediate(); renderShopTab(); }
-      };
-      wrap.appendChild(row);
-    });
-  });
-
-  const myWrap = $('#myShopItems', container);
-  if (myShop.length === 0) {
-    myWrap.innerHTML = '<p class="helper-text">Nothing offered yet — add something your partner can redeem tokens for.</p>';
-  } else {
-    myShop.forEach(item => {
-      const row = document.createElement('div');
-      row.className = 'shop-item-row';
-      row.innerHTML = `
-        <div><div class="shop-item-name">${escapeHtml(item.name)}</div>${item.description ? `<div class="exercise-meta">${escapeHtml(item.description)}</div>` : ''}</div>
-        <div class="row" style="flex:0 0 auto;">
-          <span class="shop-item-cost"><span class="coin-badge" style="width:13px;height:13px;"></span> ${item.cost}</span>
-          <button class="btn btn-sm btn-danger">Remove</button>
-        </div>
-      `;
-      row.querySelector('button').onclick = () => {
-        Storage.saveShop(myShop.filter(i => i.id !== item.id));
-        pushImmediate();
-        renderShopSection(container, activeName);
-      };
-      myWrap.appendChild(row);
-    });
-  }
-
-  $('#addShopItemBtn', container).onclick = () => {
-    const formEl = $('#addShopItemForm', container);
-    formEl.innerHTML = `
-      <div class="row" style="margin-top:8px;">
-        <input id="newItemName" placeholder="Item name">
-        <input id="newItemCost" type="number" placeholder="Cost in tokens" min="1">
-      </div>
-      <input id="newItemDesc" placeholder="Description (optional)" style="margin-top:6px;">
-      <button class="btn btn-sm btn-primary" id="saveNewItemBtn" style="margin-top:6px;">Save item</button>
-    `;
-    $('#saveNewItemBtn', formEl).onclick = () => {
-      const name = $('#newItemName', formEl).value.trim();
-      const cost = Number($('#newItemCost', formEl).value) || 0;
-      const desc = $('#newItemDesc', formEl).value.trim();
-      if (!name || cost <= 0) { toast('Give it a name and a cost above 0.'); return; }
-      Storage.saveShop([...myShop, { id: uid(), name, cost, description: desc }]);
-      pushImmediate();
+  $all('[data-shop-target]', container).forEach(btn => {
+    btn.onclick = () => {
+      state.shopViewing = btn.dataset.shopTarget;
+      state.shopCategory = 'all';
+      state.shopCardIndex = 0;
       renderShopSection(container, activeName);
     };
+  });
+  $all('[data-cat]', container).forEach(btn => {
+    btn.onclick = () => {
+      state.shopCategory = btn.dataset.cat;
+      state.shopCardIndex = 0;
+      renderShopSection(container, activeName);
+    };
+  });
+
+  renderShopCardArea(container, activeName, isOwnShop, filtered);
+
+  const addBtn = $('#addShopItemBtn', container);
+  if (addBtn) addBtn.onclick = () => renderShopItemForm(container, activeName, null);
+}
+
+function renderShopCardArea(container, activeName, isOwnShop, filtered) {
+  const area = $('#shopCardArea', container);
+  if (filtered.length === 0) {
+    area.innerHTML = `<div class="empty-state">${isOwnShop ? 'Nothing in this category yet — add something.' : 'Nothing here yet.'}</div>`;
+    return;
+  }
+  const item = filtered[state.shopCardIndex];
+  const catLabel = SHOP_CATEGORIES[item.category] || SHOP_CATEGORIES.anything;
+
+  area.innerHTML = `
+    <div class="shop-card">
+      <div class="shop-card-nav-btn shop-card-prev" ${filtered.length < 2 ? 'style="visibility:hidden;"' : ''} aria-label="Previous item">‹</div>
+      <div class="shop-card-inner">
+        <div class="shop-card-icon">${item.icon || '🎁'}</div>
+        <div class="shop-card-name">${escapeHtml(item.name)}</div>
+        <div class="shop-card-cost"><span class="coin-badge" style="width:16px;height:16px;"></span> ${item.cost}</div>
+        ${item.description ? `<div class="shop-card-desc">${escapeHtml(item.description)}</div>` : ''}
+        <div class="pill shop-card-category">${catLabel}</div>
+        <div class="row" style="justify-content:center;margin-top:14px;">
+          ${isOwnShop
+            ? `<button class="btn btn-sm" id="shopCardEditBtn">Edit</button><button class="btn btn-sm btn-danger" id="shopCardRemoveBtn">Remove</button>`
+            : `<button class="btn btn-primary btn-sm" id="shopCardRedeemBtn">Redeem</button>`}
+        </div>
+      </div>
+      <div class="shop-card-nav-btn shop-card-next" ${filtered.length < 2 ? 'style="visibility:hidden;"' : ''} aria-label="Next item">›</div>
+    </div>
+    <div class="shop-card-position">${state.shopCardIndex + 1} / ${filtered.length}</div>
+  `;
+
+  const goPrev = () => { state.shopCardIndex = (state.shopCardIndex - 1 + filtered.length) % filtered.length; renderShopCardArea(container, activeName, isOwnShop, filtered); };
+  const goNext = () => { state.shopCardIndex = (state.shopCardIndex + 1) % filtered.length; renderShopCardArea(container, activeName, isOwnShop, filtered); };
+  $('.shop-card-prev', area).onclick = goPrev;
+  $('.shop-card-next', area).onclick = goNext;
+
+  // Swipe support, with the prev/next buttons above as the accessible fallback.
+  const cardEl = $('.shop-card', area);
+  let touchStartX = null;
+  cardEl.addEventListener('touchstart', (e) => { touchStartX = e.touches[0].clientX; }, { passive: true });
+  cardEl.addEventListener('touchend', (e) => {
+    if (touchStartX === null) return;
+    const dx = e.changedTouches[0].clientX - touchStartX;
+    if (dx > 50) goPrev();
+    else if (dx < -50) goNext();
+    touchStartX = null;
+  }, { passive: true });
+
+  const editBtn = $('#shopCardEditBtn', area);
+  if (editBtn) editBtn.onclick = () => renderShopItemForm(container, activeName, item);
+  const removeBtn = $('#shopCardRemoveBtn', area);
+  if (removeBtn) removeBtn.onclick = () => {
+    if (!confirm(`Remove "${item.name}" from your shop?`)) return;
+    Storage.saveShop(Storage.getShop(activeName).filter(i => i.id !== item.id));
+    pushImmediate();
+    renderShopSection(container, activeName);
   };
+  const redeemBtn = $('#shopCardRedeemBtn', area);
+  if (redeemBtn) redeemBtn.onclick = () => {
+    if (!confirm(`Redeem "${item.name}" for ${item.cost} tokens?`)) return;
+    const res = Storage.redeemReward(state.shopViewing, item.id);
+    toast(res.ok ? `Redeemed "${item.name}"! 🎁` : res.message);
+    if (res.ok) { pushImmediate(); renderShopTab(); }
+  };
+}
+
+function renderShopItemForm(container, activeName, existing) {
+  const formEl = $('#addShopItemForm', container);
+  const myShop = Storage.getShop(activeName);
+  formEl.innerHTML = `
+    <div class="card" style="margin-top:12px;">
+      <h3>${existing ? 'Edit item' : 'New item'}</h3>
+      <div class="row">
+        <input id="newItemName" placeholder="Item name" value="${existing ? escapeHtml(existing.name) : ''}">
+        <input id="newItemCost" type="number" placeholder="Cost in tokens" min="1" value="${existing ? existing.cost : ''}">
+      </div>
+      <input id="newItemDesc" placeholder="Description (optional)" style="margin-top:6px;" value="${existing ? escapeHtml(existing.description || '') : ''}">
+      <label style="margin-top:10px;">Icon</label>
+      <div class="builder-chip-group" id="newItemIcons"></div>
+      <label style="margin-top:10px;">Category</label>
+      <div class="builder-chip-group" id="newItemCategory"></div>
+      <div class="row" style="margin-top:10px;">
+        <button class="btn btn-sm btn-primary" id="saveNewItemBtn">${existing ? 'Save changes' : 'Save item'}</button>
+        <button class="btn btn-sm" id="cancelNewItemBtn">Cancel</button>
+      </div>
+    </div>
+  `;
+  let pickedIcon = existing?.icon || SHOP_ICONS[0];
+  let pickedCategory = existing?.category || 'anything';
+
+  const iconWrap = $('#newItemIcons', formEl);
+  SHOP_ICONS.forEach(icon => {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'builder-chip' + (pickedIcon === icon ? ' selected' : '');
+    chip.style.fontSize = '16px';
+    chip.textContent = icon;
+    chip.onclick = () => { pickedIcon = icon; $all('.builder-chip', iconWrap).forEach(c => c.classList.toggle('selected', c === chip)); };
+    iconWrap.appendChild(chip);
+  });
+  const catWrap = $('#newItemCategory', formEl);
+  Object.entries(SHOP_CATEGORIES).forEach(([key, label]) => {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'builder-chip' + (pickedCategory === key ? ' selected' : '');
+    chip.textContent = label;
+    chip.onclick = () => { pickedCategory = key; $all('.builder-chip', catWrap).forEach(c => c.classList.toggle('selected', c === chip)); };
+    catWrap.appendChild(chip);
+  });
+
+  $('#saveNewItemBtn', formEl).onclick = () => {
+    const name = $('#newItemName', formEl).value.trim();
+    const cost = Number($('#newItemCost', formEl).value) || 0;
+    const desc = $('#newItemDesc', formEl).value.trim();
+    if (!name || cost <= 0) { toast('Give it a name and a cost above 0.'); return; }
+    const newItem = { id: existing?.id || uid(), name, cost, description: desc, icon: pickedIcon, category: pickedCategory };
+    const updated = existing ? myShop.map(i => i.id === existing.id ? newItem : i) : [...myShop, newItem];
+    Storage.saveShop(updated);
+    pushImmediate();
+    formEl.innerHTML = '';
+    state.shopCategory = 'all';
+    state.shopCardIndex = updated.length - 1;
+    renderShopSection(container, activeName);
+  };
+  $('#cancelNewItemBtn', formEl).onclick = () => { formEl.innerHTML = ''; };
 }
 
 function renderHomeTab() {

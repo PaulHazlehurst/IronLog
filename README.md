@@ -149,6 +149,37 @@ and glances back at it (or switches away and back), she'll see it within
 about 15 seconds without doing anything. If the app's been sitting fully
 backgrounded for a while, opening it fresh syncs right away too.
 
+## Profile panel scrolling, token rebalance, and a full Shop redesign
+
+**Profile panel** — was missing `max-height`/`overflow-y` entirely, so once
+theme/font/ambient/color/avatar pickers all stacked up, the bottom got cut
+off with no way to reach it. Fixed — it now scrolls within the viewport.
+
+**Token amounts changed** — defaults are now 12 per workout, 2 per PR
+(down from 15). This only affects brand-new setups; **your existing
+household already has 10/15 saved, so update the two fields yourself in
+Settings → Token economy** to actually change it for you two — takes
+five seconds, the values aren't retroactively overwritten automatically.
+
+**Shop redesign:**
+- **Editable items** — Edit button on any item in your own shop, opens the
+  same form pre-filled.
+- **Shop switcher** — a button row above the items to flip between "My
+  Shop" and each partner's shop, instead of everything stacked on one page.
+- **Big swipeable cards** — one item at a time, large icon, swipe left/right
+  on mobile, with **Prev/Next buttons doing the same thing** so it's not
+  swipe-only (works on desktop, works for anyone who doesn't swipe).
+- **Icons** — 20 to choose from (gift, flowers, dining, movie, money,
+  shopping bag, sparkles, gem, beach, coffee, wine, game controller, spa,
+  car, cake, chocolate, book, music, etc.) when adding or editing an item.
+- **Four categories**, exactly as specified — "Have you ever tried this
+  one?", "The Dating Game", "Shopping Spree", "Anything For You" — pick
+  one per item, filter the shop by category with chips above the card.
+- **Existing items still work** — anything added before this update had no
+  icon/category saved; it now defaults to a gift icon and "Anything For
+  You" until you edit it to set something more specific. Nothing was lost
+  or needs re-entering.
+
 ## Minor: fewer gist revisions during action bursts
 
 Not an urgent fix (the app's actual performance doesn't depend on gist

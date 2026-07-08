@@ -747,6 +747,9 @@ input, select, textarea {
   top: calc(62px + env(safe-area-inset-top, 0px));
   right: calc(12px + env(safe-area-inset-right, 0px));
   width: min(320px, calc(100vw - 24px));
+  max-height: calc(100vh - 80px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -913,6 +916,77 @@ textarea {
 }
 .shop-item-name { font-weight: 600; font-size: 13.5px; }
 .shop-item-cost { font-family: var(--font-mono); font-size: 13px; color: var(--gold); }
+
+.shop-switcher {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  margin-bottom: 8px;
+}
+.shop-switcher .btn { flex: 0 0 auto; white-space: nowrap; }
+.shop-switcher .btn.active { border-color: var(--accent); background: var(--surface-2); color: var(--text); }
+
+.shop-category-filter {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+  margin-bottom: 10px;
+}
+.shop-category-filter .builder-chip { flex: 0 0 auto; white-space: nowrap; }
+
+.shop-card {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.shop-card-inner {
+  flex: 1;
+  min-width: 0;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 28px 18px;
+  text-align: center;
+  touch-action: pan-y;
+}
+.shop-card-icon { font-size: 48px; margin-bottom: 10px; }
+.shop-card-name { font-family: var(--font-display); font-size: 20px; margin-bottom: 6px; }
+.shop-card-cost {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 15px;
+  color: var(--gold);
+  margin-bottom: 8px;
+}
+.shop-card-desc { font-size: 13px; color: var(--text-dim); margin-bottom: 10px; overflow-wrap: anywhere; }
+.shop-card-category {
+  background: var(--surface);
+  color: var(--text-dim);
+  font-size: 10.5px;
+}
+.shop-card-nav-btn {
+  flex: 0 0 auto;
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px;
+  cursor: pointer;
+  user-select: none;
+}
+.shop-card-nav-btn:hover { border-color: var(--accent); }
+.shop-card-position {
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 8px;
+}
 
 .coin-badge {
   display: inline-block;

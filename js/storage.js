@@ -82,7 +82,7 @@ function defaultProfile() {
     shop: []
   };
 }
-function defaultShared() { return { posts: [], specialDate: null, tokensPerWorkout: 10, tokensPerPR: 15, deletedProfiles: [], keepsakes: [] }; }
+function defaultShared() { return { posts: [], specialDate: null, tokensPerWorkout: 12, tokensPerPR: 2, deletedProfiles: [], keepsakes: [] }; }
 function defaultDevice() { return { githubToken: '', githubGistId: '', githubLastSync: null, activeProfile: '', lastSeenPostsAtByProfile: {}, lastNotifiedAtByProfile: {}, aiProvider: 'gemini', aiApiKey: '', aiEnabled: false }; }
 
 const PROFILE_SETTING_KEYS = ['units', 'bodyweight', 'gender', 'barWeight', 'availablePlates', 'restTimerSound', 'manualLifts', 'theme', 'tagColor', 'fontStyle', 'ambientEffect', 'themesTried', 'avatarEmoji'];
