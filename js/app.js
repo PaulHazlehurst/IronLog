@@ -39,6 +39,12 @@ function fireConfetti() {
   }
 }
 
+function avatarFor(name) {
+  const profiles = getAllProfilesRaw();
+  const emoji = profiles[name]?.settings?.avatarEmoji;
+  return emoji || (name ? name.trim()[0].toUpperCase() : '?');
+}
+
 function fmtWeight(w, unit) { return `${w}${unit}`; }
 
 function applyTheme() {
@@ -51,7 +57,7 @@ function applyTheme() {
 function renderProfileButton() {
   const { name } = Profiles.getActive();
   $('#profileNameLabel').textContent = name || 'Set up';
-  $('#profileAvatar').textContent = name ? name.trim()[0].toUpperCase() : '+';
+  $('#profileAvatar').textContent = name ? avatarFor(name) : '+';
 }
 
 function toggleProfilePanel() {
@@ -83,6 +89,7 @@ function renderProfilePanel() {
     ${names.length > 0 ? `<h3 style="margin-top:12px;">Font</h3><div class="builder-chip-group" id="fontSwatches"></div>` : ''}
     ${names.length > 0 ? `<h3 style="margin-top:12px;">Background effect</h3><div class="builder-chip-group" id="ambientSwatches"></div>` : ''}
     ${names.length > 0 ? `<h3 style="margin-top:12px;">Your color (used on Home posts)</h3><div class="theme-swatches" id="tagColorSwatches"></div>` : ''}
+    ${names.length > 0 ? `<h3 style="margin-top:12px;">Your avatar</h3><div class="builder-chip-group" id="avatarSwatches"></div>` : ''}
   `;
   const listWrap = $('#profileListWrap');
   names.forEach(n => {
@@ -93,7 +100,7 @@ function renderProfilePanel() {
     const b = document.createElement('button');
     b.style.flex = '1';
     b.className = n === activeName ? 'active' : '';
-    b.innerHTML = `<span class="profile-avatar" style="width:20px;height:20px;font-size:9px;">${n[0].toUpperCase()}</span> ${n}`;
+    b.innerHTML = `<span class="profile-avatar" style="width:20px;height:20px;font-size:9px;">${avatarFor(n)}</span> ${n}`;
     b.onclick = () => {
       Profiles.setActive(n);
       applyTheme();
@@ -202,6 +209,19 @@ function renderProfilePanel() {
       ambientWrap.appendChild(chip);
     });
   }
+  const avatarWrap = $('#avatarSwatches');
+  if (avatarWrap) {
+    const AVATAR_CHOICES = ['💪', '🔥', '⭐', '🌟', '🦋', '🌸', '👑', '🎯', '🏆', '💎', '🐱', '🌈'];
+    AVATAR_CHOICES.forEach(e => {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'builder-chip' + (settings.avatarEmoji === e ? ' selected' : '');
+      chip.textContent = e;
+      chip.style.fontSize = '16px';
+      chip.onclick = () => { Storage.saveSettings({ avatarEmoji: e }); renderProfileButton(); renderProfilePanel(); };
+      avatarWrap.appendChild(chip);
+    });
+  }
 }
 
 function allPlanExercises() {
@@ -241,6 +261,7 @@ function switchTab(tab) {
 
 function renderActiveTab() {
   if (state.activeTab === 'home') renderHomeTab();
+  if (state.activeTab === 'shop') renderShopTab();
   if (state.activeTab === 'plan') renderPlanTab();
   if (state.activeTab === 'today') renderTodayTab();
   if (state.activeTab === 'recovery') renderRecoveryTab();
@@ -300,6 +321,17 @@ const GIFT_TYPES = {
   heart: { emoji: '❤️', label: 'Send love', defaultText: 'sent you some love ❤️' }
 };
 
+const APPRECIATION_MESSAGES = [
+  "is really proud of you today, no reason needed 💛",
+  "wants you to know you're doing great, in and out of the gym 🌷",
+  "thinks you make hard days easier just by being around 🤍",
+  "is grateful to have you on this team 🫶",
+  "wants to remind you how much you're appreciated ✨",
+  "thinks you deserve a break and a good cup of something nice today ☕",
+  "is sending you a little reminder that you're loved 💗",
+  "just wanted to say: you've got this, whatever today looks like 🌼"
+];
+
 function resizeImageFile(file, maxWidth = 480, quality = 0.7) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -344,7 +376,7 @@ function renderCompetitionCardHTML(activeName) {
       <div class="competition-rows">
         ${rows.map(r => `
           <div class="competition-row">
-            <span class="post-avatar" style="background:${r.color};">${r.name[0].toUpperCase()}</span>
+            <span class="post-avatar" style="background:${r.color};">${avatarFor(r.name)}</span>
             <span class="competition-name">${r.name}${r.name === activeName ? ' (you)' : ''}</span>
             <span class="competition-sessions">${r.sessionsThisMonth} session${r.sessionsThisMonth === 1 ? '' : 's'}</span>
             ${r.sessionsThisMonth === maxSessions && maxSessions > 0 ? '<span title="Leading this month">🏆</span>' : ''}
@@ -374,6 +406,116 @@ function renderTogetherCardHTML(specialDate) {
       <button class="btn btn-sm" id="editSpecialDateBtn" style="margin-top:8px;">Edit date</button>
     </div>`;
 }
+
+const ROULETTE_SEGMENTS = [0, 0.5, 0, 1, 0, 1.5, 0, 2, 0, 5];
+
+function buildWheelGradient() {
+  const n = ROULETTE_SEGMENTS.length;
+  const step = 360 / n;
+  const colors = ['var(--accent)', 'var(--surface-2)'];
+  const stops = [];
+  for (let i = 0; i < n; i++) stops.push(`${colors[i % 2]} ${i * step}deg ${(i + 1) * step}deg`);
+  return `conic-gradient(${stops.join(', ')})`;
+}
+
+function renderShopTab() {
+  const panel = $('#panel-shop');
+  const { name: activeName } = Profiles.getActive();
+  const tokens = Storage.getTokens();
+  const settings = Storage.getSettings();
+
+  panel.innerHTML = `
+    <div class="card" style="text-align:center;">
+      <span class="coin-badge" style="width:44px;height:44px;"></span>
+      <div class="token-teaser-num" style="font-size:32px;margin-top:6px;">${tokens}</div>
+      <div class="helper-text">+${settings.tokensPerWorkout} per workout, +${settings.tokensPerPR} per PR</div>
+    </div>
+    <div class="card" style="text-align:center;">
+      <h3>🎰 Token Roulette</h3>
+      <p class="helper-text">Spin for a chance to multiply your tokens — or lose the wager. Just for fun, nothing but tokens on the line.</p>
+      <div class="roulette-wrap">
+        <div class="roulette-pointer">▼</div>
+        <div class="roulette-wheel" id="rouletteWheel" style="background:${buildWheelGradient()};"></div>
+        <div class="roulette-hub"></div>
+      </div>
+      <div class="roulette-legend">
+        <span>0x ×5</span><span>0.5x</span><span>1x</span><span>1.5x</span><span>2x</span><span>5x JACKPOT</span>
+      </div>
+      <div class="row" style="justify-content:center;margin-top:14px;max-width:260px;margin-left:auto;margin-right:auto;">
+        <input id="wagerInput" type="number" min="1" max="${Math.max(1, tokens)}" value="${Math.min(10, Math.max(1, tokens))}" ${tokens < 1 ? 'disabled' : ''}>
+        <button class="btn btn-primary btn-sm" id="spinBtn" ${tokens < 1 ? 'disabled' : ''}>Spin</button>
+      </div>
+      <div id="rouletteResult" class="helper-text" style="margin-top:8px;min-height:16px;"></div>
+    </div>
+    <div class="card">
+      <h3>🛍️ Shop</h3>
+      <div id="shopSection"></div>
+    </div>
+  `;
+
+  $('#spinBtn').onclick = () => spinRoulette();
+  renderShopSection($('#shopSection'), activeName);
+}
+
+function spinRoulette() {
+  const wagerInput = $('#wagerInput');
+  const spinBtn = $('#spinBtn');
+  const wager = Math.floor(Number(wagerInput.value));
+  const balance = Storage.getTokens();
+  if (!wager || wager < 1) { toast('Enter a wager first.'); return; }
+  if (wager > balance) { toast("You don't have that many tokens."); return; }
+
+  spinBtn.disabled = true;
+  wagerInput.disabled = true;
+  $('#rouletteResult').textContent = '';
+
+  const idx = Math.floor(Math.random() * ROULETTE_SEGMENTS.length);
+  const multiplier = ROULETTE_SEGMENTS[idx];
+  const step = 360 / ROULETTE_SEGMENTS.length;
+  const center = idx * step + step / 2;
+  const spins = 5;
+  const rotation = spins * 360 + (360 - center);
+
+  const wheel = $('#rouletteWheel');
+  wheel.style.transition = 'none';
+  wheel.style.transform = 'rotate(0deg)';
+  void wheel.offsetWidth;
+  wheel.style.transition = 'transform 3.5s cubic-bezier(0.15,0.9,0.25,1)';
+  wheel.style.transform = `rotate(${rotation}deg)`;
+
+  setTimeout(() => {
+    const winnings = Math.round(wager * multiplier);
+    const net = winnings - wager;
+    Storage.addTokens(net, multiplier === 0 ? 'Roulette: lost wager' : `Roulette: ${multiplier}x (${net >= 0 ? '+' : ''}${net})`);
+    const resultEl = $('#rouletteResult');
+    if (!resultEl) return; // tab may have changed
+    if (multiplier >= 5) {
+      resultEl.innerHTML = `<span style="color:var(--gold);font-weight:600;">🎉 JACKPOT! 5x — won ${winnings} tokens!</span>`;
+      fireConfetti();
+      const settings = Storage.getSettings();
+      const { name: activeName } = Profiles.getActive();
+      Storage.addPost({ type: 'comment', authorProfile: activeName, authorColor: settings.tagColor, text: `hit the roulette JACKPOT and won ${winnings} tokens! 🎰🎉` });
+    } else if (multiplier > 1) {
+      resultEl.innerHTML = `<span style="color:var(--success);">Nice — ${multiplier}x, +${net} tokens.</span>`;
+    } else if (multiplier === 1) {
+      resultEl.innerHTML = `<span>Push — wager returned.</span>`;
+    } else if (multiplier > 0) {
+      resultEl.innerHTML = `<span style="color:var(--amber);">${multiplier}x — lost ${Math.abs(net)} tokens.</span>`;
+    } else {
+      resultEl.innerHTML = `<span style="color:var(--accent);">Bust — lost your ${wager}-token wager.</span>`;
+    }
+    // Update balance/inputs in place so the result message above stays visible.
+    const newBalance = Storage.getTokens();
+    const balanceNumEl = $('.token-teaser-num', panelShopEl());
+    if (balanceNumEl) balanceNumEl.textContent = newBalance;
+    wagerInput.max = Math.max(1, newBalance);
+    wagerInput.value = Math.min(Number(wagerInput.value) || 10, Math.max(1, newBalance));
+    wagerInput.disabled = newBalance < 1;
+    spinBtn.disabled = newBalance < 1;
+  }, 3600);
+}
+
+function panelShopEl() { return $('#panel-shop'); }
 
 function renderShopSection(container, activeName) {
   const profiles = getAllProfilesRaw();
@@ -408,7 +550,7 @@ function renderShopSection(container, activeName) {
       row.innerHTML = `
         <div><div class="shop-item-name">${escapeHtml(item.name)}</div>${item.description ? `<div class="exercise-meta">${escapeHtml(item.description)}</div>` : ''}</div>
         <div class="row" style="flex:0 0 auto;">
-          <span class="shop-item-cost">🪙 ${item.cost}</span>
+          <span class="shop-item-cost"><span class="coin-badge" style="width:13px;height:13px;"></span> ${item.cost}</span>
           <button class="btn btn-sm">Redeem</button>
         </div>
       `;
@@ -432,7 +574,7 @@ function renderShopSection(container, activeName) {
       row.innerHTML = `
         <div><div class="shop-item-name">${escapeHtml(item.name)}</div>${item.description ? `<div class="exercise-meta">${escapeHtml(item.description)}</div>` : ''}</div>
         <div class="row" style="flex:0 0 auto;">
-          <span class="shop-item-cost">🪙 ${item.cost}</span>
+          <span class="shop-item-cost"><span class="coin-badge" style="width:13px;height:13px;"></span> ${item.cost}</span>
           <button class="btn btn-sm btn-danger">Remove</button>
         </div>
       `;
@@ -482,15 +624,10 @@ function renderHomeTab() {
       <div class="streak-stat" style="margin:0 auto;"><div class="num">${jointStreak}</div><div class="lbl">Week${jointStreak === 1 ? '' : 's'} trained together</div></div>
     </div>` : ''}
     ${renderCompetitionCardHTML(activeName)}
-    <div class="card">
-      <div class="row" style="justify-content:space-between;align-items:center;">
-        <div>
-          <h3 style="margin-bottom:2px;">🪙 ${Storage.getTokens()} tokens</h3>
-          <div class="exercise-meta">+${Storage.getSettings().tokensPerWorkout} per workout, +${Storage.getSettings().tokensPerPR} per PR</div>
-        </div>
-        <button class="btn btn-sm" id="openShopBtn">🛍️ Shop</button>
-      </div>
-      <div id="shopSection"></div>
+    <div class="card token-teaser" id="tokenTeaser">
+      <span class="coin-badge" style="width:26px;height:26px;"></span>
+      <span class="token-teaser-num">${Storage.getTokens()}</span>
+      <span class="token-teaser-lbl">tokens — tap to visit the Shop</span>
     </div>
     <div class="card">
       <h3>Say something</h3>
@@ -503,6 +640,7 @@ function renderHomeTab() {
       <input type="file" id="photoInput" accept="image/*" style="display:none;">
       <div class="row" style="margin-top:10px;flex-wrap:wrap;">
         ${Object.entries(GIFT_TYPES).map(([key, g]) => `<button class="btn btn-sm gift-btn" data-gift="${key}">${g.emoji} ${g.label}</button>`).join('')}
+        <button class="btn btn-sm" id="sendAppreciationBtn">💌 Send appreciation</button>
       </div>
       ${notifPermissionButtonHTML()}
     </div>
@@ -522,13 +660,7 @@ function renderHomeTab() {
     renderHomeTab();
   };
 
-  $('#openShopBtn').onclick = () => {
-    const section = $('#shopSection');
-    section.innerHTML = section.innerHTML ? '' : '<div class="helper-text">Loading…</div>';
-    if (section.dataset.open === 'true') { section.innerHTML = ''; section.dataset.open = 'false'; return; }
-    section.dataset.open = 'true';
-    renderShopSection(section, activeName);
-  };
+  $('#tokenTeaser').onclick = () => switchTab('shop');
 
   const renderPhotoPreview = () => {
     const wrap = $('#photoPreviewWrap');
@@ -577,6 +709,18 @@ function renderHomeTab() {
     };
   });
 
+  $('#sendAppreciationBtn').onclick = () => {
+    const settings = Storage.getSettings();
+    const msg = APPRECIATION_MESSAGES[Math.floor(Math.random() * APPRECIATION_MESSAGES.length)];
+    Storage.addPost({
+      type: 'appreciation', authorProfile: activeName, authorColor: settings.tagColor,
+      text: `${activeName} ${msg}`
+    });
+    fireFalling('heart');
+    toast('💌 Sent!');
+    renderHomeTab();
+  };
+
   const notifBtn = $('#enableNotifBtn');
   if (notifBtn) notifBtn.onclick = async () => {
     const perm = await Notification.requestPermission();
@@ -611,14 +755,15 @@ function renderPostCard(p, activeName) {
   const isWorkout = p.type === 'workout_complete';
   const isGift = p.type === 'gift';
   const isRedemption = p.type === 'redemption';
-  card.className = 'card post-card' + (isGift || isRedemption ? ' gift-card' : '');
+  const isAppreciation = p.type === 'appreciation';
+  card.className = 'card post-card' + (isGift || isRedemption || isAppreciation ? ' gift-card' : '');
   card.innerHTML = `
     <div class="post-head">
-      <span class="post-avatar" style="background:${p.authorColor || 'var(--accent)'};">${(p.authorProfile || '?')[0].toUpperCase()}</span>
+      <span class="post-avatar" style="background:${p.authorColor || 'var(--accent)'};">${p.authorProfile ? avatarFor(p.authorProfile) : '?'}</span>
       <span class="post-author">${p.authorProfile || 'Someone'}</span>
       <span class="post-time">${timeAgo(p.createdAt)}</span>
     </div>
-    <div class="post-body">${isWorkout ? '🏋️ ' : ''}${isGift ? `${GIFT_TYPES[p.giftType]?.emoji || '🎁'} ` : ''}${escapeHtml(p.text)}</div>
+    <div class="post-body">${isWorkout ? '🏋️ ' : ''}${isGift ? `${GIFT_TYPES[p.giftType]?.emoji || '🎁'} ` : ''}${isAppreciation ? '💌 ' : ''}${escapeHtml(p.text)}</div>
     ${p.photoDataUrl ? `<img src="${p.photoDataUrl}" class="post-photo">` : ''}
     <div class="post-reactions" id="reactions-${p.id}"></div>
   `;
@@ -1279,8 +1424,8 @@ function finalizeSession(templateDay, exercises, logs, getSetsForExercise, chirp
     text: `completed ${templateDay}'s workout${prLine}${chirpLine}`
   });
   toast(prCount > 0
-    ? `Session saved. <span class="pr-toast-badge">${prCount} New PR${prCount > 1 ? 's' : ''}!</span> +${tokensEarned} 🪙`
-    : `Session saved. +${tokensEarned} 🪙 — next week's targets will update from this.`);
+    ? `Session saved. <span class="pr-toast-badge">${prCount} New PR${prCount > 1 ? 's' : ''}!</span> +${tokensEarned} <span class="coin-badge" style="width:13px;height:13px;"></span>`
+    : `Session saved. +${tokensEarned} <span class="coin-badge" style="width:13px;height:13px;"></span> — next week's targets will update from this.`);
   if (prCount > 0) fireConfetti();
   return { prCount, tokensEarned };
 }

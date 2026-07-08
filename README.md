@@ -125,6 +125,32 @@ maintain, they just reflect where you already are.
 side-by-side of sessions logged this calendar month, with a 🏆 next to
 whoever's ahead. Meant to be lighthearted, not a real leaderboard.
 
+## Shop is now its own tab, with a coin design and a roulette game
+
+**Coin icon** — tokens now show as a custom gold coin badge (CSS-drawn,
+theme-aware) instead of the 🪙 emoji, which renders as a fixed color
+regardless of theme. Used consistently in the Shop tab, shop item costs,
+and session-save toasts.
+
+**Shop tab** — token balance, the shop itself (browse others' offerings,
+manage your own), and the new roulette game all live in their own tab now
+instead of being buried in Home.
+
+**Token Roulette** — wager any amount up to your balance, spin, land on a
+multiplier: mostly 0x (lose the wager), sometimes 0.5x–2x, rarely a 5x
+jackpot (which also posts to Home and sets off confetti). Purely a private,
+just-for-fun mini-game using your own token balance — no real money touches
+this feature at all, the game itself is just a coin-flip dressed up nicely.
+
+**Avatars** — profile panel → pick an emoji instead of a plain first-letter
+circle. Shows up everywhere your profile appears: header, Home posts,
+Friendly Competition, the profile switcher.
+
+**Send appreciation** — Home tab, next to the gift buttons. Posts a random
+warm, non-fitness-related note to the household ("is really proud of you
+today, no reason needed 💛") — meant to give the app an emotional register
+beyond workout stats and gym gamification.
+
 ## Token economy & shop
 
 Every saved workout earns tokens (10 by default, +15 more per PR — both

@@ -914,6 +914,68 @@ textarea {
 .shop-item-name { font-weight: 600; font-size: 13.5px; }
 .shop-item-cost { font-family: var(--font-mono); font-size: 13px; color: var(--gold); }
 
+.coin-badge {
+  display: inline-block;
+  vertical-align: middle;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #FFF3C4, #F7C948 55%, #C9971A 100%);
+  box-shadow: inset 0 0 0 2px rgba(255,255,255,0.45), 0 1px 2px rgba(0,0,0,0.35);
+}
+
+/* ============================================================
+   TOKEN ROULETTE
+   ============================================================ */
+.roulette-wrap { position: relative; width: 200px; height: 200px; margin: 14px auto; }
+.roulette-wheel {
+  width: 100%; height: 100%;
+  border-radius: 50%;
+  border: 4px solid var(--gold);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+}
+.roulette-pointer {
+  position: absolute;
+  top: -16px; left: 50%;
+  transform: translateX(-50%);
+  font-size: 24px;
+  color: var(--gold);
+  z-index: 2;
+  filter: drop-shadow(0 2px 2px rgba(0,0,0,0.4));
+}
+.roulette-hub {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 3px solid var(--gold);
+  z-index: 1;
+}
+.roulette-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+  margin-top: 8px;
+}
+.roulette-legend span {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  background: var(--surface-2);
+  border-radius: 999px;
+  padding: 3px 9px;
+  color: var(--text-dim);
+}
+
+.token-teaser {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+.token-teaser-num { font-family: var(--font-mono); font-size: 20px; font-weight: 600; }
+.token-teaser-lbl { color: var(--text-dim); font-size: 13px; }
+
 /* ============================================================
    TROPHY CASE
    ============================================================ */

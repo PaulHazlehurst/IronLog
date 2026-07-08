@@ -67,7 +67,7 @@ function defaultProfileSettings() {
     units: 'lb', bodyweight: 180, gender: 'male',
     barWeight: 45, availablePlates: [45, 35, 25, 10, 5, 2.5],
     restTimerSound: true, manualLifts: {}, theme: 'iron', tagColor: null, fontStyle: 'modern',
-    ambientEffect: 'none', themesTried: ['iron']
+    ambientEffect: 'none', themesTried: ['iron'], avatarEmoji: null
   };
 }
 function defaultProfile() {
@@ -85,7 +85,7 @@ function defaultProfile() {
 function defaultShared() { return { posts: [], specialDate: null, tokensPerWorkout: 10, tokensPerPR: 15 }; }
 function defaultDevice() { return { githubToken: '', githubGistId: '', githubLastSync: null, activeProfile: '', lastSeenPostsAtByProfile: {}, aiProvider: 'gemini', aiApiKey: '', aiEnabled: false }; }
 
-const PROFILE_SETTING_KEYS = ['units', 'bodyweight', 'gender', 'barWeight', 'availablePlates', 'restTimerSound', 'manualLifts', 'theme', 'tagColor', 'fontStyle', 'ambientEffect', 'themesTried'];
+const PROFILE_SETTING_KEYS = ['units', 'bodyweight', 'gender', 'barWeight', 'availablePlates', 'restTimerSound', 'manualLifts', 'theme', 'tagColor', 'fontStyle', 'ambientEffect', 'themesTried', 'avatarEmoji'];
 const SHARED_SETTING_KEYS = ['specialDate', 'tokensPerWorkout', 'tokensPerPR'];
 const DEVICE_SETTING_KEYS = ['githubToken', 'githubGistId', 'githubLastSync', 'aiProvider', 'aiApiKey', 'aiEnabled'];
 
