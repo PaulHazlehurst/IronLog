@@ -353,7 +353,9 @@ const GIFT_TYPES = {
   rose: { emoji: '🌹', label: 'Rose', defaultText: 'sent you a rose 🌹' },
   flowers: { emoji: '💐', label: 'Flowers', defaultText: 'sent you flowers 💐' },
   kiss: { emoji: '💋', label: 'Kiss', defaultText: 'sent you a kiss 💋' },
-  heart: { emoji: '❤️', label: 'Love', defaultText: 'sent you some love ❤️' }
+  heart: { emoji: '❤️', label: 'Love', defaultText: 'sent you some love ❤️' },
+  hug: { emoji: '🤗', label: 'Hug', defaultText: 'sent you a hug 🤗' },
+  hype: { emoji: '🔥', label: 'Hype', defaultText: 'is hyping you up 🔥' }
 };
 
 const APPRECIATION_MESSAGES = [
@@ -365,6 +367,24 @@ const APPRECIATION_MESSAGES = [
   "thinks you deserve a break and a good cup of something nice today ☕",
   "is sending you a little reminder that you're loved 💗",
   "just wanted to say: you've got this, whatever today looks like 🌼"
+];
+
+const SURPRISE_IDEAS = [
+  "🍳 Cook a meal neither of you has made before.",
+  "🎬 Pick a movie neither of you has seen and no peeking at reviews first.",
+  "🌇 Watch the sunset somewhere you've never been for it.",
+  "🎲 Board game night — loser makes breakfast tomorrow.",
+  "🚶 Take a walk with no destination and see where you end up.",
+  "📸 Recreate a photo from early in your relationship.",
+  "🧩 Do a puzzle together, no phones until it's done.",
+  "🎨 Try a craft or art project you'd both be bad at.",
+  "🌌 Find somewhere dark enough to actually see the stars.",
+  "☕ Try a coffee shop or restaurant you've driven past a hundred times but never gone in.",
+  "📖 Read the same book and talk about it as you go.",
+  "🚴 Go somewhere on bikes instead of the car for once.",
+  "🕯️ Have a no-plans night — candles, music, just talk.",
+  "🎤 Karaoke, even if it's just in the kitchen.",
+  "🗺️ Plan a trip you might not take yet, just for the fun of planning it."
 ];
 
 function resizeImageFile(file, maxWidth = 480, quality = 0.7) {
@@ -423,6 +443,18 @@ function renderDaysTogetherChipHTML(specialDate) {
       <div class="stat-chip-num">${Math.abs(days)}</div>
       <div class="stat-chip-lbl">day${Math.abs(days) === 1 ? '' : 's'} ${days >= 0 ? 'together' : 'to go'}</div>
     </button>`;
+}
+
+function renderPhotoGalleryHTML(posts) {
+  const photos = posts.filter(p => p.photoDataUrl);
+  if (photos.length === 0) return '';
+  return `
+    <div class="card">
+      <h3>📸 Our photos</h3>
+      <div class="photo-gallery" id="photoGallery">
+        ${photos.map(p => `<img src="${p.photoDataUrl}" class="photo-gallery-thumb" data-full="${p.photoDataUrl}">`).join('')}
+      </div>
+    </div>`;
 }
 
 const ROULETTE_SEGMENTS = [0, 0.5, 0, 1, 0, 1.5, 0, 2, 0, 5];
@@ -1007,6 +1039,23 @@ function renderCardioSection(area, activeName) {
   };
 }
 
+function openPhotoViewer(dataUrl) {
+  const overlay = document.createElement('div');
+  overlay.className = 'photo-viewer-overlay';
+  overlay.innerHTML = `<img src="${dataUrl}" class="photo-viewer-img"><button class="photo-viewer-close" aria-label="Close">✕</button>`;
+  overlay.onclick = () => overlay.remove();
+  document.body.appendChild(overlay);
+}
+
+function greetingFor(name) {
+  const h = new Date().getHours();
+  if (h < 5) return `Still up, ${name}? 🌙`;
+  if (h < 12) return `Good morning, ${name} ☀️`;
+  if (h < 17) return `Good afternoon, ${name} 🌤️`;
+  if (h < 21) return `Good evening, ${name} 🌆`;
+  return `Winding down, ${name}? 🌙`;
+}
+
 function renderHomeTab() {
   const panel = $('#panel-home');
   const posts = Storage.getPosts();
@@ -1023,11 +1072,14 @@ function renderHomeTab() {
     { key: 'rose', emoji: '🌹', label: 'Rose', gradient: 'linear-gradient(135deg,#FF6B6B,#C81F3C)' },
     { key: 'flowers', emoji: '💐', label: 'Flowers', gradient: 'linear-gradient(135deg,#FF9A8B,#FF6A88)' },
     { key: 'kiss', emoji: '💋', label: 'Kiss', gradient: 'linear-gradient(135deg,#F857A6,#FF5858)' },
+    { key: 'hug', emoji: '🤗', label: 'Hug', gradient: 'linear-gradient(135deg,#FFB88C,#DE6262)' },
     { key: 'heart', emoji: '❤️', label: 'Love', gradient: 'linear-gradient(135deg,#FF758C,#FF7EB3)' },
+    { key: 'hype', emoji: '🔥', label: 'Hype', gradient: 'linear-gradient(135deg,#FFA751,#FF6B6B)' },
     { key: 'appreciation', emoji: '💌', label: 'Thanks', gradient: 'linear-gradient(135deg,#F7B733,#FC4A1A)' }
   ];
 
   panel.innerHTML = `
+    <div class="home-greeting">${greetingFor(activeName)}</div>
     <div class="ig-stats-strip">
       ${renderDaysTogetherChipHTML(settings.specialDate)}
       ${jointStreak > 0 ? `<div class="stat-chip"><div class="stat-chip-num">${jointStreak}</div><div class="stat-chip-lbl">week streak</div></div>` : ''}
@@ -1065,6 +1117,15 @@ function renderHomeTab() {
       <div id="keepsakeList" class="keepsake-list"></div>
     </div>
 
+    <div class="card" style="text-align:center;">
+      <h3>🎲 Surprise us</h3>
+      <p class="helper-text">A random idea for the two of you, whenever you're out of ideas.</p>
+      <button class="btn btn-primary btn-sm" id="surpriseBtn" style="margin-top:6px;">Surprise us</button>
+      <div id="surpriseResult" class="rx-box" style="display:none;margin-top:12px;text-align:left;"></div>
+    </div>
+
+    ${renderPhotoGalleryHTML(posts)}
+
     ${notifPermissionButtonHTML() ? `<div class="card">${notifPermissionButtonHTML()}</div>` : ''}
 
     <div id="postsFeed" class="ig-feed"></div>
@@ -1092,6 +1153,17 @@ function renderHomeTab() {
   }
 
   $('#tokenChip').onclick = () => switchTab('shop');
+
+  $('#surpriseBtn').onclick = () => {
+    const idea = SURPRISE_IDEAS[Math.floor(Math.random() * SURPRISE_IDEAS.length)];
+    const resultEl = $('#surpriseResult');
+    resultEl.style.display = 'block';
+    resultEl.textContent = idea;
+  };
+
+  $all('.photo-gallery-thumb', panel).forEach(img => {
+    img.onclick = () => openPhotoViewer(img.dataset.full);
+  });
 
   const renderKeepsakeList = () => {
     const listEl = $('#keepsakeList');
@@ -1180,7 +1252,10 @@ function renderHomeTab() {
       if (!gift) return;
       const customText = $('#postComposer').value.trim();
       Storage.addPost({ type: 'gift', giftType: key, authorProfile: activeName, authorColor: settings.tagColor, text: customText || gift.defaultText });
-      if (key === 'kiss') fireKissMarks(); else fireFalling(key);
+      if (key === 'kiss') fireKissMarks();
+      else if (key === 'hug') fireHugPulse();
+      else if (key === 'hype') fireHypeBurst();
+      else fireFalling(key);
       toast(`${gift.emoji} Sent!`);
       pushImmediate();
       renderHomeTab();
@@ -1213,7 +1288,12 @@ function renderHomeTab() {
     posts.forEach(p => feed.appendChild(renderPostCard(p, activeName)));
   }
 
-  if (unseenGift) { if (unseenGift.giftType === 'kiss') fireKissMarks(); else fireFalling(unseenGift.giftType); }
+  if (unseenGift) {
+    if (unseenGift.giftType === 'kiss') fireKissMarks();
+    else if (unseenGift.giftType === 'hug') fireHugPulse();
+    else if (unseenGift.giftType === 'hype') fireHypeBurst();
+    else fireFalling(unseenGift.giftType);
+  }
   Storage.setLastSeenPostsAt(activeName, new Date().toISOString());
 }
 
@@ -1317,6 +1397,42 @@ function fireKissMarks() {
     el.style.animationDelay = `${i * 0.12}s`;
     document.body.appendChild(el);
     setTimeout(() => el.remove(), 2400 + i * 120);
+  }
+}
+
+// A warm expanding-ring pulse from screen center, distinct from the
+// particle-based effects — meant to feel like an actual embrace.
+function fireHugPulse() {
+  for (let i = 0; i < 3; i++) {
+    const ring = document.createElement('div');
+    ring.className = 'hug-ring';
+    ring.style.animationDelay = `${i * 0.25}s`;
+    document.body.appendChild(ring);
+    setTimeout(() => ring.remove(), 2000);
+  }
+  const emoji = document.createElement('div');
+  emoji.className = 'hug-emoji';
+  emoji.textContent = '🤗';
+  document.body.appendChild(emoji);
+  setTimeout(() => emoji.remove(), 1600);
+}
+
+// A full-circle fire burst plus a quick screen shake — more energetic than
+// the romantic gifts, meant to feel like a hype-man moment, not a bouquet.
+function fireHypeBurst() {
+  document.body.classList.add('hype-shake');
+  setTimeout(() => document.body.classList.remove('hype-shake'), 450);
+  const count = 10;
+  for (let i = 0; i < count; i++) {
+    const el = document.createElement('div');
+    el.className = 'hype-fire';
+    const angle = (i / count) * 360 + Math.random() * 20;
+    const dist = 110 + Math.random() * 60;
+    el.style.setProperty('--dx', `${Math.cos(angle * Math.PI / 180) * dist}px`);
+    el.style.setProperty('--dy', `${Math.sin(angle * Math.PI / 180) * dist}px`);
+    el.style.animationDelay = `${Math.random() * 0.15}s`;
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 1300);
   }
 }
 

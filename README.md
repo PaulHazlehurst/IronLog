@@ -149,6 +149,27 @@ and glances back at it (or switches away and back), she'll see it within
 about 15 seconds without doing anything. If the app's been sitting fully
 backgrounded for a while, opening it fresh syncs right away too.
 
+## More gifts, plus a few things aimed squarely at her experience
+
+**Two more gift types**, each with a genuinely distinct animation rather
+than reusing the same falling effect:
+- **🤗 Hug** — expanding warm rings pulsing out from the center of the
+  screen, more like an embrace than a shower of petals.
+- **🔥 Hype** — a full-circle fire burst plus a quick screen shake, more
+  energetic than the romantic gifts, fits post-workout hype-man energy.
+
+**Personalized greeting** — top of Home now reads "Good morning, Sarah ☀️"
+(or afternoon/evening/night) based on the actual time of day.
+
+**🎲 Surprise us** — a button on Home that hands back a random low-effort
+date/activity idea when you're both out of ideas. Purely relationship
+content, nothing fitness or token related — a deliberate counterweight to
+how much of this app is gamification.
+
+**📸 Our photos** — every photo ever shared in the feed now also collects
+into a permanent scrollable gallery on Home (same "doesn't scroll away"
+principle as Reasons Why), tap any thumbnail for a full-screen view.
+
 ## Home screen — full redesign
 
 Rebuilt from the ground up with the visual language of the polished social
