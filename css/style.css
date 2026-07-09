@@ -988,6 +988,24 @@ textarea {
   margin-top: 8px;
 }
 
+/* ============================================================
+   WELLNESS — library
+   ============================================================ */
+.bookshelf {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 10px;
+}
+.book-card {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+}
+.book-title { font-family: var(--font-display); font-size: 14px; }
+.book-progress-text { font-family: var(--font-mono); font-size: 11.5px; color: var(--text-dim); margin-top: 4px; }
+
 .coin-badge {
   display: inline-block;
   vertical-align: middle;
@@ -1049,6 +1067,154 @@ textarea {
 }
 .token-teaser-num { font-family: var(--font-mono); font-size: 20px; font-weight: 600; }
 .token-teaser-lbl { color: var(--text-dim); font-size: 13px; }
+
+/* ============================================================
+   HOME REDESIGN — stats strip, quick actions, composer, feed
+   ============================================================ */
+.ig-stats-strip {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  margin-bottom: 14px;
+  -webkit-overflow-scrolling: touch;
+}
+.stat-chip {
+  flex: 0 0 auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 10px 16px;
+  text-align: center;
+  min-width: 84px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.1s ease;
+}
+.stat-chip:active { transform: scale(0.96); }
+.stat-chip-num { font-family: var(--font-mono); font-size: 17px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 4px; }
+.stat-chip-lbl { font-size: 10.5px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.03em; margin-top: 2px; }
+.stat-chip-action { color: var(--accent); border-style: dashed; }
+.stat-chip-wide { min-width: 160px; text-align: left; }
+.stat-chip-competition { font-size: 12px; margin-top: 4px; display: flex; gap: 8px; flex-wrap: wrap; }
+.stat-chip-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 4px; }
+
+.ig-qa-row {
+  display: flex;
+  gap: 14px;
+  overflow-x: auto;
+  padding: 2px 2px 10px;
+  margin-bottom: 4px;
+  -webkit-overflow-scrolling: touch;
+}
+.qa-item {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+.qa-item:active .qa-circle { transform: scale(0.9); }
+.qa-circle {
+  width: 52px; height: 52px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px;
+  box-shadow: 0 3px 10px rgba(0,0,0,0.35);
+  transition: transform 0.12s ease;
+}
+.qa-label { font-size: 10.5px; color: var(--text-dim); }
+
+.ig-composer {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.ig-composer-avatar { width: 38px; height: 38px; font-size: 15px; flex-shrink: 0; margin-bottom: 3px; }
+.ig-composer-input-wrap {
+  flex: 1;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 10px 16px;
+}
+.ig-composer-input-wrap textarea {
+  background: none;
+  border: none;
+  padding: 0;
+  resize: none;
+  min-height: 20px;
+  max-height: 90px;
+}
+.ig-send-btn {
+  width: 38px; height: 38px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-ink);
+  border: none;
+  font-size: 16px;
+  flex-shrink: 0;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: transform 0.1s ease, filter 0.15s ease;
+}
+.ig-send-btn:active { transform: scale(0.92); }
+.ig-send-btn:hover { filter: brightness(1.1); }
+
+.keepsake-card { margin-bottom: 16px; }
+
+.ig-feed { display: flex; flex-direction: column; gap: 12px; }
+.ig-post {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--author-color, var(--accent));
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+.ig-post-special { background: linear-gradient(135deg, rgba(240,85,156,0.08), rgba(76,141,255,0.05)); }
+.ig-post-header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.ig-post-avatar { width: 34px; height: 34px; font-size: 14px; flex-shrink: 0; }
+.ig-post-meta { display: flex; flex-direction: column; line-height: 1.25; }
+.ig-post-author { font-family: var(--font-display); font-size: 13.5px; }
+.ig-post-time { font-size: 11px; color: var(--text-dim); font-family: var(--font-mono); }
+.ig-post-body { font-size: 14.5px; margin-bottom: 8px; overflow-wrap: anywhere; cursor: pointer; user-select: none; }
+.ig-post-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+
+.heart-burst {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%) scale(0.5);
+  font-size: 56px;
+  pointer-events: none;
+  animation: heartBurst 0.8s ease forwards;
+  z-index: 5;
+}
+@keyframes heartBurst {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.4); }
+  30% { opacity: 1; transform: translate(-50%, -50%) scale(1.3); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1.6); }
+}
+
+.kiss-mark {
+  position: fixed;
+  z-index: 65;
+  font-size: 62px;
+  pointer-events: none;
+  animation: kissStamp 1.8s ease forwards;
+  filter: drop-shadow(0 4px 10px rgba(0,0,0,0.4));
+}
+@keyframes kissStamp {
+  0% { opacity: 0; transform: scale(0.3) rotate(var(--r, 0deg)); }
+  15% { opacity: 1; transform: scale(1.15) rotate(var(--r, 0deg)); }
+  25% { transform: scale(1) rotate(var(--r, 0deg)); }
+  78% { opacity: 1; transform: scale(1) rotate(var(--r, 0deg)); }
+  100% { opacity: 0; transform: scale(0.92) rotate(var(--r, 0deg)); }
+}
 
 /* ============================================================
    REASONS WHY

@@ -9,7 +9,10 @@ let state = {
   restTimers: {},
   shopViewing: null,
   shopCategory: 'all',
-  shopCardIndex: 0
+  shopCardIndex: 0,
+  wellnessSection: 'water',
+  libraryViewing: null,
+  editingSpecialDate: false
 };
 
 function $(sel, root = document) { return root.querySelector(sel); }
@@ -292,6 +295,7 @@ function switchTab(tab) {
 function renderActiveTab() {
   if (state.activeTab === 'home') renderHomeTab();
   if (state.activeTab === 'shop') renderShopTab();
+  if (state.activeTab === 'wellness') renderWellnessTab();
   if (state.activeTab === 'plan') renderPlanTab();
   if (state.activeTab === 'today') renderTodayTab();
   if (state.activeTab === 'recovery') renderRecoveryTab();
@@ -346,9 +350,10 @@ function notifPermissionButtonHTML() {
 
 let pendingPhotoDataUrl = null;
 const GIFT_TYPES = {
-  rose: { emoji: '🌹', label: 'Send a rose', defaultText: 'sent you a rose 🌹' },
-  flowers: { emoji: '💐', label: 'Send flowers', defaultText: 'sent you flowers 💐' },
-  heart: { emoji: '❤️', label: 'Send love', defaultText: 'sent you some love ❤️' }
+  rose: { emoji: '🌹', label: 'Rose', defaultText: 'sent you a rose 🌹' },
+  flowers: { emoji: '💐', label: 'Flowers', defaultText: 'sent you flowers 💐' },
+  kiss: { emoji: '💋', label: 'Kiss', defaultText: 'sent you a kiss 💋' },
+  heart: { emoji: '❤️', label: 'Love', defaultText: 'sent you some love ❤️' }
 };
 
 const APPRECIATION_MESSAGES = [
@@ -384,7 +389,7 @@ function resizeImageFile(file, maxWidth = 480, quality = 0.7) {
   });
 }
 
-function renderCompetitionCardHTML(activeName) {
+function renderCompetitionChipsHTML(activeName) {
   const profiles = getAllProfilesRaw();
   const names = Object.keys(profiles);
   if (names.length < 2) return '';
@@ -393,59 +398,57 @@ function renderCompetitionCardHTML(activeName) {
   const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   const rows = names.map(name => {
     const logs = profiles[name].logs || [];
-    const streak = Consistency.currentStreakWeeks(logs);
     const sessionsThisMonth = Consistency.sessionDates(logs).filter(d => d.startsWith(monthKey)).length;
     const color = profiles[name].settings?.tagColor || 'var(--accent)';
-    return { name, streak, sessionsThisMonth, color };
+    return { name, sessionsThisMonth, color };
   });
   const maxSessions = Math.max(...rows.map(r => r.sessionsThisMonth));
 
   return `
-    <div class="card">
-      <h3>This month</h3>
-      <div class="competition-rows">
-        ${rows.map(r => `
-          <div class="competition-row">
-            <span class="post-avatar" style="background:${r.color};">${avatarFor(r.name)}</span>
-            <span class="competition-name">${r.name}${r.name === activeName ? ' (you)' : ''}</span>
-            <span class="competition-sessions">${r.sessionsThisMonth} session${r.sessionsThisMonth === 1 ? '' : 's'}</span>
-            ${r.sessionsThisMonth === maxSessions && maxSessions > 0 ? '<span title="Leading this month">🏆</span>' : ''}
-          </div>
-        `).join('')}
+    <div class="stat-chip stat-chip-wide">
+      <div class="stat-chip-lbl">This month</div>
+      <div class="stat-chip-competition">
+        ${rows.map(r => `<span><span class="stat-chip-dot" style="background:${r.color};"></span>${r.name === activeName ? 'You' : escapeHtml(r.name)} ${r.sessionsThisMonth}${r.sessionsThisMonth === maxSessions && maxSessions > 0 ? ' 🏆' : ''}</span>`).join(' · ')}
       </div>
-      <p class="helper-text">Friendly count only — sessions logged this calendar month.</p>
     </div>`;
 }
 
-function renderTogetherCardHTML(specialDate) {
+function renderDaysTogetherChipHTML(specialDate) {
   if (!specialDate) {
-    return `
-    <div class="card">
-      <h3>Special date</h3>
-      <p class="helper-text">Set an anniversary or start date to see a running count on Home.</p>
-      <div class="row">
-        <input type="date" id="specialDateInput">
-        <button class="btn btn-sm btn-primary" id="saveSpecialDateBtn">Save</button>
-      </div>
-    </div>`;
+    return `<button class="stat-chip stat-chip-action" id="setDateChip"><div class="stat-chip-lbl">+ Add a date</div></button>`;
   }
   const days = Math.floor((new Date(isoDate() + 'T00:00:00') - new Date(specialDate + 'T00:00:00')) / (24 * 3600 * 1000));
   return `
-    <div class="card" style="text-align:center;">
-      <div class="streak-stat" style="margin:0 auto;"><div class="num">${Math.abs(days)}</div><div class="lbl">Day${Math.abs(days) === 1 ? '' : 's'} ${days >= 0 ? 'together' : 'to go'}</div></div>
-      <button class="btn btn-sm" id="editSpecialDateBtn" style="margin-top:8px;">Edit date</button>
-    </div>`;
+    <button class="stat-chip" id="setDateChip">
+      <div class="stat-chip-num">${Math.abs(days)}</div>
+      <div class="stat-chip-lbl">day${Math.abs(days) === 1 ? '' : 's'} ${days >= 0 ? 'together' : 'to go'}</div>
+    </button>`;
 }
 
 const ROULETTE_SEGMENTS = [0, 0.5, 0, 1, 0, 1.5, 0, 2, 0, 5];
 
-function buildWheelGradient() {
+function buildWheelSVG() {
   const n = ROULETTE_SEGMENTS.length;
   const step = 360 / n;
+  const cx = 100, cy = 100, r = 96;
   const colors = ['var(--accent)', 'var(--surface-2)'];
-  const stops = [];
-  for (let i = 0; i < n; i++) stops.push(`${colors[i % 2]} ${i * step}deg ${(i + 1) * step}deg`);
-  return `conic-gradient(${stops.join(', ')})`;
+  const toXY = (angleDeg, radius) => {
+    const rad = (angleDeg * Math.PI) / 180;
+    return [cx + radius * Math.sin(rad), cy - radius * Math.cos(rad)];
+  };
+  let paths = '';
+  let labels = '';
+  ROULETTE_SEGMENTS.forEach((mult, i) => {
+    const a1 = i * step, a2 = (i + 1) * step;
+    const [x1, y1] = toXY(a1, r);
+    const [x2, y2] = toXY(a2, r);
+    const color = colors[i % 2];
+    paths += `<path d="M${cx},${cy} L${x1.toFixed(2)},${y1.toFixed(2)} A${r},${r} 0 0,1 ${x2.toFixed(2)},${y2.toFixed(2)} Z" fill="${color}" stroke="var(--bg)" stroke-width="1.5"/>`;
+    const [lx, ly] = toXY((a1 + a2) / 2, r * 0.66);
+    const label = mult >= 5 ? '5x' : `${mult}x`;
+    labels += `<text x="${lx.toFixed(2)}" y="${ly.toFixed(2)}" font-size="${mult >= 5 ? 15 : 13}" font-family="var(--font-mono)" fill="${mult >= 5 ? 'var(--gold)' : 'var(--text)'}" text-anchor="middle" dominant-baseline="middle" font-weight="700">${label}</text>`;
+  });
+  return `<svg viewBox="0 0 200 200" class="roulette-wheel" id="rouletteWheel">${paths}${labels}</svg>`;
 }
 
 function renderShopTab() {
@@ -465,7 +468,7 @@ function renderShopTab() {
       <p class="helper-text">Spin for a chance to multiply your tokens — or lose the wager. Just for fun, nothing but tokens on the line.</p>
       <div class="roulette-wrap">
         <div class="roulette-pointer">▼</div>
-        <div class="roulette-wheel" id="rouletteWheel" style="background:${buildWheelGradient()};"></div>
+        ${buildWheelSVG()}
         <div class="roulette-hub"></div>
       </div>
       <div class="roulette-legend">
@@ -734,23 +737,325 @@ function renderShopItemForm(container, activeName, existing) {
   $('#cancelNewItemBtn', formEl).onclick = () => { formEl.innerHTML = ''; };
 }
 
+const WELLNESS_SECTIONS = { water: '💧 Water', library: '📚 Library', study: '📖 Study', cardio: '🏃 Cardio' };
+
+function renderWellnessTab() {
+  const panel = $('#panel-wellness');
+  const { name: activeName } = Profiles.getActive();
+
+  panel.innerHTML = `
+    <div class="shop-category-filter">
+      ${Object.entries(WELLNESS_SECTIONS).map(([key, label]) => `<button class="builder-chip${state.wellnessSection === key ? ' selected' : ''}" data-wsec="${key}">${label}</button>`).join('')}
+    </div>
+    <div id="wellnessSectionArea"></div>
+  `;
+  $all('[data-wsec]', panel).forEach(btn => {
+    btn.onclick = () => { state.wellnessSection = btn.dataset.wsec; renderWellnessTab(); };
+  });
+
+  const area = $('#wellnessSectionArea');
+  if (state.wellnessSection === 'water') renderWaterSection(area, activeName);
+  if (state.wellnessSection === 'library') renderLibrarySection(area, activeName);
+  if (state.wellnessSection === 'study') renderStudySection(area, activeName);
+  if (state.wellnessSection === 'cardio') renderCardioSection(area, activeName);
+}
+
+/* ---------------- WATER ---------------- */
+function renderWaterSection(area, activeName) {
+  const done = Storage.hasRedeemedWaterToday();
+  area.innerHTML = `
+    <div class="card" style="text-align:center;">
+      <h3>💧 Water intake</h3>
+      <p class="helper-text">Women: 11.5 cups · Men: 15.5 cups</p>
+      ${done
+        ? `<p class="helper-text" style="color:var(--success);margin-top:10px;">✓ Already redeemed today — nice.</p>`
+        : `<button class="btn btn-primary" id="redeemWaterBtn" style="margin-top:8px;">Redeem +10 <span class="coin-badge" style="width:13px;height:13px;"></span></button>`}
+      <p class="helper-text" style="margin-top:10px;">Once per day, per person.</p>
+    </div>
+  `;
+  const btn = $('#redeemWaterBtn');
+  if (btn) btn.onclick = () => {
+    const ok = confirm('Are you sure you drank enough water today?\n\nWomen: 11.5 cups\nMen: 15.5 cups');
+    if (!ok) return;
+    const res = Storage.redeemWater();
+    if (res.ok) { toast('+10 tokens 💧'); pushImmediate(); renderWaterSection(area, activeName); }
+    else toast(res.message);
+  };
+}
+
+/* ---------------- LIBRARY ---------------- */
+function renderLibrarySection(area, activeName) {
+  const profiles = getAllProfilesRaw();
+  const otherNames = Object.keys(profiles).filter(n => n !== activeName);
+  if (!state.libraryViewing || !profiles[state.libraryViewing]) state.libraryViewing = activeName;
+  const isOwn = state.libraryViewing === activeName;
+  const books = Storage.getLibrary(state.libraryViewing);
+
+  area.innerHTML = `
+    <div class="shop-switcher">
+      <button class="btn btn-sm${isOwn ? ' active' : ''}" data-lib-target="${escapeHtml(activeName)}">My Library</button>
+      ${otherNames.map(n => `<button class="btn btn-sm${state.libraryViewing === n ? ' active' : ''}" data-lib-target="${escapeHtml(n)}">${escapeHtml(n)}'s Library</button>`).join('')}
+    </div>
+    <div id="bookshelf" class="bookshelf"></div>
+    ${isOwn ? `<button class="btn btn-primary btn-sm" id="addBookBtn" style="margin-top:10px;">+ Add book</button>` : ''}
+    <div id="addBookForm"></div>
+  `;
+  $all('[data-lib-target]', area).forEach(btn => {
+    btn.onclick = () => { state.libraryViewing = btn.dataset.libTarget; renderLibrarySection(area, activeName); };
+  });
+
+  const shelf = $('#bookshelf', area);
+  if (books.length === 0) {
+    shelf.innerHTML = `<div class="empty-state">${isOwn ? 'No books yet — add one to start earning tokens by the page.' : 'No books on this shelf yet.'}</div>`;
+  } else {
+    shelf.innerHTML = '';
+    books.forEach(book => {
+      const pct = Math.round((book.pagesRead / book.totalPages) * 100);
+      const card = document.createElement('div');
+      card.className = 'book-card';
+      card.innerHTML = `
+        <div class="book-title">${escapeHtml(book.title)}</div>
+        <div class="exercise-meta">${escapeHtml(book.author || 'Unknown author')}</div>
+        <div class="muscle-bar-track" style="margin-top:8px;"><div class="muscle-bar-fill" style="width:${pct}%;background:var(--accent);"></div></div>
+        <div class="book-progress-text">${book.pagesRead} / ${book.totalPages} pages (${pct}%)</div>
+        <div id="bookDetail-${book.id}"></div>
+      `;
+      if (isOwn) {
+        const editRow = document.createElement('div');
+        editRow.className = 'row';
+        editRow.style.marginTop = '8px';
+        editRow.innerHTML = `
+          <input type="number" min="0" max="${book.totalPages}" value="${book.pagesRead}" id="pagesInput-${book.id}">
+          <button class="btn btn-sm">Update</button>
+          <button class="btn btn-sm btn-danger" style="flex:0 0 auto;">✕</button>
+        `;
+        const buttons = editRow.querySelectorAll('button');
+        buttons[0].onclick = () => {
+          const val = Number($(`#pagesInput-${book.id}`, editRow).value);
+          const res = Storage.updateBookProgress(book.id, val);
+          if (res.ok) {
+            toast(res.delta > 0 ? `+${res.delta} tokens 📖` : 'Updated.');
+            pushImmediate();
+            renderLibrarySection(area, activeName);
+          }
+        };
+        buttons[1].onclick = () => {
+          if (!confirm(`Remove "${book.title}" from your shelf? This doesn't refund tokens already earned.`)) return;
+          Storage.removeBook(book.id);
+          pushImmediate();
+          renderLibrarySection(area, activeName);
+        };
+        card.appendChild(editRow);
+      } else {
+        card.style.cursor = 'pointer';
+        card.onclick = () => {
+          const detail = $(`#bookDetail-${book.id}`, card);
+          detail.innerHTML = detail.innerHTML
+            ? ''
+            : `<p class="helper-text" style="margin-top:6px;">${book.pagesRead} of ${book.totalPages} pages read — ${pct}% through.</p>`;
+        };
+      }
+      shelf.appendChild(card);
+    });
+  }
+
+  const addBtn = $('#addBookBtn', area);
+  if (addBtn) addBtn.onclick = () => {
+    const formEl = $('#addBookForm', area);
+    formEl.innerHTML = `
+      <div class="card" style="margin-top:10px;">
+        <h3>New book</h3>
+        <input id="newBookTitle" placeholder="Title" style="margin-bottom:8px;">
+        <input id="newBookAuthor" placeholder="Author" style="margin-bottom:8px;">
+        <input id="newBookPages" type="number" min="1" placeholder="Total pages">
+        <div class="row" style="margin-top:10px;">
+          <button class="btn btn-sm btn-primary" id="saveBookBtn">Save book</button>
+          <button class="btn btn-sm" id="cancelBookBtn">Cancel</button>
+        </div>
+      </div>
+    `;
+    $('#saveBookBtn', formEl).onclick = () => {
+      const title = $('#newBookTitle', formEl).value.trim();
+      const author = $('#newBookAuthor', formEl).value.trim();
+      const pages = Number($('#newBookPages', formEl).value) || 0;
+      if (!title || pages < 1) { toast('Give it a title and a page count.'); return; }
+      Storage.addBook(title, author, pages);
+      pushImmediate();
+      renderLibrarySection(area, activeName);
+    };
+    $('#cancelBookBtn', formEl).onclick = () => { formEl.innerHTML = ''; };
+  };
+}
+
+/* ---------------- STUDY ---------------- */
+function renderStudySection(area, activeName) {
+  const log = Storage.getStudyLog();
+  area.innerHTML = `
+    <div class="card">
+      <h3>📖 Log a study session</h3>
+      <input id="studySubject" placeholder="What did you study?" style="margin-bottom:8px;">
+      <input id="studyMinutes" type="number" min="1" placeholder="Minutes">
+      <p class="helper-text">5 tokens per 10 minutes, plus up to 50 bonus tokens if AI evaluates your recall.</p>
+      <button class="btn btn-primary btn-sm" id="logStudyBtn">Log session</button>
+      <div id="studyRecallArea"></div>
+    </div>
+    <div class="card">
+      <h3>History</h3>
+      <div id="studyHistory"></div>
+    </div>
+  `;
+  const historyEl = $('#studyHistory', area);
+  if (log.length === 0) {
+    historyEl.innerHTML = `<div class="empty-state">No study sessions logged yet.</div>`;
+  } else {
+    historyEl.innerHTML = log.slice(0, 20).map(s => `
+      <div class="exercise-row">
+        <div>
+          <div class="exercise-name">${escapeHtml(s.subject)}</div>
+          <div class="exercise-meta">${s.minutes}m · ${s.date}${s.bonus ? ` · +${s.bonus} recall bonus` : ''}</div>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  $('#logStudyBtn', area).onclick = () => {
+    const subject = $('#studySubject', area).value.trim();
+    const minutes = Number($('#studyMinutes', area).value);
+    if (!subject || !minutes || minutes < 1) { toast('Enter a subject and a duration.'); return; }
+    const recallArea = $('#studyRecallArea', area);
+    recallArea.innerHTML = `
+      <div class="rx-box" style="margin-top:10px;">
+        Session logged for the base reward. Now tell me what you learned for a shot at up to 50 bonus tokens:
+      </div>
+      <textarea id="studyRecallInput" rows="3" placeholder="What do you remember from this session?" style="margin-top:8px;"></textarea>
+      <div class="row" style="margin-top:8px;">
+        <button class="btn btn-sm btn-primary" id="submitRecallBtn">Submit recall</button>
+        <button class="btn btn-sm" id="skipRecallBtn">Skip bonus</button>
+      </div>
+    `;
+    $('#submitRecallBtn', recallArea).onclick = async () => {
+      const recallText = $('#studyRecallInput', recallArea).value.trim();
+      const btn = $('#submitRecallBtn', recallArea);
+      btn.disabled = true; btn.textContent = 'Evaluating…';
+      const result = await AI.evaluateStudyRecall(subject, minutes, recallText);
+      const bonus = result.ok ? result.score : 0;
+      const total = Storage.addStudySession(subject, minutes, recallText, bonus);
+      pushImmediate();
+      toast(result.ok
+        ? `+${total} tokens total (${bonus} recall bonus). ${result.feedback || ''}`
+        : `Logged — ${result.message}`);
+      renderStudySection(area, activeName);
+    };
+    $('#skipRecallBtn', recallArea).onclick = () => {
+      const total = Storage.addStudySession(subject, minutes, '', 0);
+      pushImmediate();
+      toast(`+${total} tokens.`);
+      renderStudySection(area, activeName);
+    };
+  };
+}
+
+/* ---------------- CARDIO ---------------- */
+function renderCardioSection(area, activeName) {
+  const log = Storage.getCardioLog();
+  const CARDIO_TYPES = ['Walking', 'Running', 'Swimming', 'Cycling', 'Rowing', 'Other'];
+  area.innerHTML = `
+    <div class="card">
+      <h3>🏃 Log cardio</h3>
+      <div class="builder-chip-group" id="cardioTypeChips"></div>
+      <input id="cardioMinutes" type="number" min="1" placeholder="Minutes" style="margin-top:10px;">
+      <p class="helper-text">1 token per 2 minutes.</p>
+      <button class="btn btn-primary btn-sm" id="logCardioBtn">Log cardio</button>
+    </div>
+    <div class="card">
+      <h3>History</h3>
+      <div id="cardioHistory"></div>
+    </div>
+  `;
+  let pickedType = CARDIO_TYPES[0];
+  const chipWrap = $('#cardioTypeChips', area);
+  CARDIO_TYPES.forEach(t => {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'builder-chip' + (t === pickedType ? ' selected' : '');
+    chip.textContent = t;
+    chip.onclick = () => { pickedType = t; $all('.builder-chip', chipWrap).forEach(c => c.classList.toggle('selected', c === chip)); };
+    chipWrap.appendChild(chip);
+  });
+
+  const historyEl = $('#cardioHistory', area);
+  if (log.length === 0) {
+    historyEl.innerHTML = `<div class="empty-state">No cardio logged yet.</div>`;
+  } else {
+    historyEl.innerHTML = log.slice(0, 20).map(c => `
+      <div class="exercise-row">
+        <div>
+          <div class="exercise-name">${escapeHtml(c.type)}</div>
+          <div class="exercise-meta">${c.minutes}m · ${c.date}</div>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  $('#logCardioBtn', area).onclick = () => {
+    const minutes = Number($('#cardioMinutes', area).value);
+    if (!minutes || minutes < 1) { toast('Enter a duration first.'); return; }
+    const coins = Storage.addCardioSession(pickedType, minutes);
+    pushImmediate();
+    toast(`+${coins} tokens 🏃`);
+    renderCardioSection(area, activeName);
+  };
+}
+
 function renderHomeTab() {
   const panel = $('#panel-home');
   const posts = Storage.getPosts();
   const { name: activeName } = Profiles.getActive();
+  const settings = Storage.getSettings();
   const jointStreak = Storage.jointStreakWeeks();
+  const tokens = Storage.getTokens();
 
-  // Check for unseen gifts from someone else before we mark everything read.
   const lastSeen = Storage.getLastSeenPostsAt(activeName);
   const unseenGift = posts.find(p => p.giftType && p.authorProfile !== activeName && (!lastSeen || new Date(p.createdAt) > new Date(lastSeen)));
 
+  const QUICK_ACTIONS = [
+    { key: 'photo', emoji: '📷', label: 'Photo', gradient: 'linear-gradient(135deg,#4C8DFF,#2FD4C0)' },
+    { key: 'rose', emoji: '🌹', label: 'Rose', gradient: 'linear-gradient(135deg,#FF6B6B,#C81F3C)' },
+    { key: 'flowers', emoji: '💐', label: 'Flowers', gradient: 'linear-gradient(135deg,#FF9A8B,#FF6A88)' },
+    { key: 'kiss', emoji: '💋', label: 'Kiss', gradient: 'linear-gradient(135deg,#F857A6,#FF5858)' },
+    { key: 'heart', emoji: '❤️', label: 'Love', gradient: 'linear-gradient(135deg,#FF758C,#FF7EB3)' },
+    { key: 'appreciation', emoji: '💌', label: 'Thanks', gradient: 'linear-gradient(135deg,#F7B733,#FC4A1A)' }
+  ];
+
   panel.innerHTML = `
-    ${renderTogetherCardHTML(Storage.getSettings().specialDate)}
-    ${jointStreak > 0 ? `
-    <div class="card" style="text-align:center;">
-      <div class="streak-stat" style="margin:0 auto;"><div class="num">${jointStreak}</div><div class="lbl">Week${jointStreak === 1 ? '' : 's'} trained together</div></div>
-    </div>` : ''}
-    <div class="card">
+    <div class="ig-stats-strip">
+      ${renderDaysTogetherChipHTML(settings.specialDate)}
+      ${jointStreak > 0 ? `<div class="stat-chip"><div class="stat-chip-num">${jointStreak}</div><div class="stat-chip-lbl">week streak</div></div>` : ''}
+      <button class="stat-chip" id="tokenChip"><div class="stat-chip-num"><span class="coin-badge" style="width:15px;height:15px;"></span> ${tokens}</div><div class="stat-chip-lbl">tokens</div></button>
+      ${renderCompetitionChipsHTML(activeName)}
+    </div>
+    <div id="specialDateEditArea"></div>
+
+    <div class="ig-qa-row">
+      ${QUICK_ACTIONS.map(qa => `
+        <button class="qa-item" data-qa="${qa.key}">
+          <span class="qa-circle" style="background:${qa.gradient};">${qa.emoji}</span>
+          <span class="qa-label">${qa.label}</span>
+        </button>
+      `).join('')}
+    </div>
+
+    <div class="ig-composer">
+      <span class="post-avatar ig-composer-avatar" style="background:${settings.tagColor || 'var(--accent)'};">${avatarFor(activeName)}</span>
+      <div class="ig-composer-input-wrap">
+        <textarea id="postComposer" rows="1" placeholder="Share something with your household…"></textarea>
+        <div id="photoPreviewWrap"></div>
+      </div>
+      <button class="ig-send-btn" id="postBtn" aria-label="Post">➤</button>
+    </div>
+    <input type="file" id="photoInput" accept="image/*" style="display:none;">
+
+    <div class="card keepsake-card">
       <h3>💕 Reasons why</h3>
       <p class="helper-text">A running, permanent list — unlike the feed below, nothing here ever scrolls away.</p>
       <div class="row">
@@ -759,46 +1064,34 @@ function renderHomeTab() {
       </div>
       <div id="keepsakeList" class="keepsake-list"></div>
     </div>
-    ${renderCompetitionCardHTML(activeName)}
-    <div class="card token-teaser" id="tokenTeaser">
-      <span class="coin-badge" style="width:26px;height:26px;"></span>
-      <span class="token-teaser-num">${Storage.getTokens()}</span>
-      <span class="token-teaser-lbl">tokens — tap to visit the Shop</span>
-    </div>
-    <div class="card">
-      <h3>Say something</h3>
-      <textarea id="postComposer" rows="2" placeholder="Leave a note for the household…" style="resize:vertical;"></textarea>
-      <div id="photoPreviewWrap"></div>
-      <div class="row" style="margin-top:8px;flex-wrap:wrap;">
-        <button class="btn btn-sm" id="attachPhotoBtn" type="button">📷 Attach photo</button>
-        <button class="btn btn-primary btn-sm" id="postBtn">Post</button>
-      </div>
-      <input type="file" id="photoInput" accept="image/*" style="display:none;">
-      <div class="row" style="margin-top:10px;flex-wrap:wrap;">
-        ${Object.entries(GIFT_TYPES).map(([key, g]) => `<button class="btn btn-sm gift-btn" data-gift="${key}">${g.emoji} ${g.label}</button>`).join('')}
-        <button class="btn btn-sm" id="sendAppreciationBtn">💌 Send appreciation</button>
-      </div>
-      ${notifPermissionButtonHTML()}
-    </div>
-    <div id="postsFeed"></div>
+
+    ${notifPermissionButtonHTML() ? `<div class="card">${notifPermissionButtonHTML()}</div>` : ''}
+
+    <div id="postsFeed" class="ig-feed"></div>
   `;
 
-  const saveSpecialBtn = $('#saveSpecialDateBtn');
-  if (saveSpecialBtn) saveSpecialBtn.onclick = () => {
-    const val = $('#specialDateInput').value;
-    if (!val) { toast('Pick a date first.'); return; }
-    Storage.saveSettings({ specialDate: val });
-    pushImmediate();
-    renderHomeTab();
-  };
-  const editSpecialBtn = $('#editSpecialDateBtn');
-  if (editSpecialBtn) editSpecialBtn.onclick = () => {
-    Storage.saveSettings({ specialDate: null });
-    pushImmediate();
-    renderHomeTab();
-  };
+  const dateChip = $('#setDateChip');
+  if (dateChip) dateChip.onclick = () => { state.editingSpecialDate = !state.editingSpecialDate; renderHomeTab(); };
+  if (state.editingSpecialDate) {
+    $('#specialDateEditArea').innerHTML = `
+      <div class="card">
+        <label>Special date</label>
+        <div class="row">
+          <input type="date" id="specialDateInput" value="${settings.specialDate || ''}">
+          <button class="btn btn-sm btn-primary" id="saveSpecialDateBtn">Save</button>
+        </div>
+      </div>`;
+    $('#saveSpecialDateBtn').onclick = () => {
+      const val = $('#specialDateInput').value;
+      if (!val) { toast('Pick a date first.'); return; }
+      Storage.saveSettings({ specialDate: val });
+      pushImmediate();
+      state.editingSpecialDate = false;
+      renderHomeTab();
+    };
+  }
 
-  $('#tokenTeaser').onclick = () => switchTab('shop');
+  $('#tokenChip').onclick = () => switchTab('shop');
 
   const renderKeepsakeList = () => {
     const listEl = $('#keepsakeList');
@@ -831,7 +1124,6 @@ function renderHomeTab() {
     const input = $('#keepsakeInput');
     const text = input.value.trim();
     if (!text) return;
-    const settings = Storage.getSettings();
     Storage.addKeepsake(text, activeName, settings.tagColor);
     input.value = '';
     pushImmediate();
@@ -851,7 +1143,6 @@ function renderHomeTab() {
   };
   renderPhotoPreview();
 
-  $('#attachPhotoBtn').onclick = () => $('#photoInput').click();
   $('#photoInput').onchange = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -866,42 +1157,35 @@ function renderHomeTab() {
   $('#postBtn').onclick = () => {
     const text = $('#postComposer').value.trim();
     if (!text && !pendingPhotoDataUrl) return;
-    const settings = Storage.getSettings();
     Storage.addPost({ type: 'comment', authorProfile: activeName, authorColor: settings.tagColor, text, photoDataUrl: pendingPhotoDataUrl || null });
     pendingPhotoDataUrl = null;
     pushImmediate();
     renderHomeTab();
   };
 
-  $all('.gift-btn').forEach(btn => {
+  $all('.qa-item', panel).forEach(btn => {
     btn.onclick = () => {
-      const key = btn.dataset.gift;
+      const key = btn.dataset.qa;
+      if (key === 'photo') { $('#photoInput').click(); return; }
+      if (key === 'appreciation') {
+        const msg = APPRECIATION_MESSAGES[Math.floor(Math.random() * APPRECIATION_MESSAGES.length)];
+        Storage.addPost({ type: 'appreciation', authorProfile: activeName, authorColor: settings.tagColor, text: `${activeName} ${msg}` });
+        fireFalling('heart');
+        toast('💌 Sent!');
+        pushImmediate();
+        renderHomeTab();
+        return;
+      }
       const gift = GIFT_TYPES[key];
-      const settings = Storage.getSettings();
+      if (!gift) return;
       const customText = $('#postComposer').value.trim();
-      Storage.addPost({
-        type: 'gift', giftType: key, authorProfile: activeName, authorColor: settings.tagColor,
-        text: customText || gift.defaultText
-      });
-      fireFalling(key);
+      Storage.addPost({ type: 'gift', giftType: key, authorProfile: activeName, authorColor: settings.tagColor, text: customText || gift.defaultText });
+      if (key === 'kiss') fireKissMarks(); else fireFalling(key);
       toast(`${gift.emoji} Sent!`);
       pushImmediate();
       renderHomeTab();
     };
   });
-
-  $('#sendAppreciationBtn').onclick = () => {
-    const settings = Storage.getSettings();
-    const msg = APPRECIATION_MESSAGES[Math.floor(Math.random() * APPRECIATION_MESSAGES.length)];
-    Storage.addPost({
-      type: 'appreciation', authorProfile: activeName, authorColor: settings.tagColor,
-      text: `${activeName} ${msg}`
-    });
-    fireFalling('heart');
-    toast('💌 Sent!');
-    pushImmediate();
-    renderHomeTab();
-  };
 
   const notifBtn = $('#enableNotifBtn');
   if (notifBtn) notifBtn.onclick = async () => {
@@ -929,7 +1213,7 @@ function renderHomeTab() {
     posts.forEach(p => feed.appendChild(renderPostCard(p, activeName)));
   }
 
-  if (unseenGift) fireFalling(unseenGift.giftType);
+  if (unseenGift) { if (unseenGift.giftType === 'kiss') fireKissMarks(); else fireFalling(unseenGift.giftType); }
   Storage.setLastSeenPostsAt(activeName, new Date().toISOString());
 }
 
@@ -939,27 +1223,63 @@ function renderPostCard(p, activeName) {
   const isGift = p.type === 'gift';
   const isRedemption = p.type === 'redemption';
   const isAppreciation = p.type === 'appreciation';
-  card.className = 'card post-card' + (isGift || isRedemption || isAppreciation ? ' gift-card' : '');
+  card.className = 'ig-post' + (isGift || isRedemption || isAppreciation ? ' ig-post-special' : '');
+  card.style.setProperty('--author-color', p.authorColor || 'var(--accent)');
   card.innerHTML = `
-    <div class="post-head">
-      <span class="post-avatar" style="background:${p.authorColor || 'var(--accent)'};">${p.authorProfile ? avatarFor(p.authorProfile) : '?'}</span>
-      <span class="post-author">${p.authorProfile || 'Someone'}</span>
-      <span class="post-time">${timeAgo(p.createdAt)}</span>
+    <div class="ig-post-header">
+      <span class="post-avatar ig-post-avatar" style="background:${p.authorColor || 'var(--accent)'};">${p.authorProfile ? avatarFor(p.authorProfile) : '?'}</span>
+      <div class="ig-post-meta">
+        <span class="ig-post-author">${escapeHtml(p.authorProfile || 'Someone')}</span>
+        <span class="ig-post-time">${timeAgo(p.createdAt)}</span>
+      </div>
     </div>
-    <div class="post-body">${isWorkout ? '🏋️ ' : ''}${isGift ? `${GIFT_TYPES[p.giftType]?.emoji || '🎁'} ` : ''}${isAppreciation ? '💌 ' : ''}${escapeHtml(p.text)}</div>
+    <div class="ig-post-body">${isWorkout ? '🏋️ ' : ''}${isGift ? `${GIFT_TYPES[p.giftType]?.emoji || '🎁'} ` : ''}${isAppreciation ? '💌 ' : ''}${escapeHtml(p.text)}</div>
     ${p.photoDataUrl ? `<img src="${p.photoDataUrl}" class="post-photo">` : ''}
-    <div class="post-reactions" id="reactions-${p.id}"></div>
+    <div class="ig-post-actions" id="reactions-${p.id}"></div>
   `;
-  const reactWrap = card.querySelector('.post-reactions');
-  POST_EMOJIS.forEach(emoji => {
-    const users = (p.reactions && p.reactions[emoji]) || [];
-    const btn = document.createElement('button');
-    btn.className = 'reaction-chip' + (users.includes(activeName) ? ' active' : '');
-    btn.textContent = `${emoji}${users.length ? ' ' + users.length : ''}`;
-    btn.onclick = () => { Storage.toggleReaction(p.id, emoji, activeName); pushImmediate(); renderHomeTab(); };
-    reactWrap.appendChild(btn);
+
+  const refreshReactions = () => {
+    const fresh = Storage.getPosts().find(x => x.id === p.id) || p;
+    const wrap = card.querySelector('.ig-post-actions');
+    wrap.innerHTML = '';
+    POST_EMOJIS.forEach(emoji => {
+      const users = (fresh.reactions && fresh.reactions[emoji]) || [];
+      const btn = document.createElement('button');
+      btn.className = 'reaction-chip' + (users.includes(activeName) ? ' active' : '');
+      btn.textContent = `${emoji}${users.length ? ' ' + users.length : ''}`;
+      btn.onclick = () => { Storage.toggleReaction(p.id, emoji, activeName); pushImmediate(); refreshReactions(); };
+      wrap.appendChild(btn);
+    });
+  };
+  refreshReactions();
+
+  // Double-tap the post body/photo to heart-react, Instagram-style.
+  let lastTap = 0;
+  const bodyEl = card.querySelector('.ig-post-body');
+  const tapTargets = [bodyEl, card.querySelector('.post-photo')].filter(Boolean);
+  tapTargets.forEach(el => {
+    el.addEventListener('click', () => {
+      const now = Date.now();
+      if (now - lastTap < 350) {
+        Storage.toggleReaction(p.id, '❤️', activeName);
+        pushImmediate();
+        refreshReactions();
+        burstHeart(card);
+      }
+      lastTap = now;
+    });
   });
+
   return card;
+}
+
+function burstHeart(anchorEl) {
+  const heart = document.createElement('div');
+  heart.className = 'heart-burst';
+  heart.textContent = '❤️';
+  anchorEl.style.position = anchorEl.style.position || 'relative';
+  anchorEl.appendChild(heart);
+  setTimeout(() => heart.remove(), 900);
 }
 
 function fireFalling(kind) {
@@ -980,6 +1300,23 @@ function fireFalling(kind) {
     el.style.fontSize = `${20 + Math.random() * 16}px`;
     document.body.appendChild(el);
     setTimeout(() => el.remove(), 6000);
+  }
+}
+
+// A distinct "stamp" effect for kisses — big lip marks that pop onto the
+// screen at random spots and fade, rather than falling like the other gifts.
+function fireKissMarks() {
+  const count = 6;
+  for (let i = 0; i < count; i++) {
+    const el = document.createElement('div');
+    el.className = 'kiss-mark';
+    el.textContent = '💋';
+    el.style.left = `${10 + Math.random() * 70}vw`;
+    el.style.top = `${12 + Math.random() * 55}vh`;
+    el.style.setProperty('--r', `${-25 + Math.random() * 50}deg`);
+    el.style.animationDelay = `${i * 0.12}s`;
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 2400 + i * 120);
   }
 }
 
@@ -1423,6 +1760,7 @@ function renderAddExerciseForm(existing) {
 }
 
 /* ---------------- TODAY TAB ---------------- */
+let todayForceShowForm = false;
 function renderTodayTab() {
   const today = isoDate();
   const { templateDay, exercises } = Scheduler.effectiveDayFor(today);
@@ -1432,6 +1770,33 @@ function renderTodayTab() {
   const logs = Storage.getLogs();
   const settings = Storage.getSettings();
   const panel = $('#panel-today');
+  const { name: activeName } = Profiles.getActive();
+
+  const alreadyLoggedToday = logs.some(l => l.date === today);
+  if (alreadyLoggedToday && !todayForceShowForm) {
+    const ENCOURAGE_MESSAGES = ['Your turn! 💪', 'Beat my numbers today 😏', "Let's go, keep the streak alive! 🔥", 'No excuses — get yours in today 😉'];
+    panel.innerHTML = `
+      <div class="card" style="text-align:center;">
+        <h2 style="font-size:22px;margin-bottom:6px;">✅ Workout complete</h2>
+        <p class="helper-text">You've completed today's workout (${templateDay}). Nice work — now go encourage your partner to get theirs in.</p>
+        <div class="row" style="justify-content:center;margin-top:14px;flex-wrap:wrap;" id="encourageRow">
+          ${ENCOURAGE_MESSAGES.map(m => `<button class="btn btn-sm encourage-btn" data-msg="${escapeHtml(m)}">${escapeHtml(m)}</button>`).join('')}
+        </div>
+        <button class="btn btn-sm" id="logAnotherBtn" style="margin-top:14px;">Log another session today</button>
+      </div>
+    `;
+    $all('.encourage-btn', panel).forEach(btn => {
+      btn.onclick = () => {
+        Storage.addPost({ type: 'comment', authorProfile: activeName, authorColor: settings.tagColor, text: btn.dataset.msg });
+        pushImmediate();
+        toast('Sent!');
+      };
+    });
+    $('#logAnotherBtn').onclick = () => { todayForceShowForm = true; renderTodayTab(); };
+    renderWeekDial();
+    return;
+  }
+  todayForceShowForm = false;
 
   const overrides = Storage.getWeekOverrides();
   const wasReshuffled = !!overrides[mondayOf(today)];
@@ -1633,7 +1998,7 @@ function releaseWakeLock() {
 }
 let lastAutoSyncCheck = 0;
 function hasOpenTransientForm() {
-  return ['addShopItemForm', 'planBuilderForm', 'addExerciseForm'].some(id => {
+  return ['addShopItemForm', 'planBuilderForm', 'addExerciseForm', 'addBookForm', 'studyRecallArea'].some(id => {
     const el = document.getElementById(id);
     return el && el.innerHTML.trim() !== '';
   });

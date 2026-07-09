@@ -113,6 +113,24 @@ Respond with ONLY valid JSON, no markdown fences, no commentary, matching exactl
     }
   },
 
+  async evaluateStudyRecall(subject, minutes, recallText) {
+    if (!AI.isConfigured()) {
+      return { ok: false, message: 'Turn on AI in Settings and add a Gemini key for a recall bonus.' };
+    }
+    if (!recallText || !recallText.trim()) return { ok: true, score: 0, feedback: '' };
+    const prompt = `A student studied "${subject}" for ${minutes} minutes. Here is what they say they recall/learned:\n\n"${recallText.trim()}"\n\nRate the accuracy, specificity, and depth of this recall on a scale from 0 to 50 (50 = detailed and clearly demonstrates real understanding of the subject; 0 = empty, vague, generic, or shows no real engagement with the material — be honest, don't inflate the score). Respond with ONLY valid JSON, no markdown fences: {"score": <integer 0-50>, "feedback": "one short encouraging sentence, plain language"}`;
+    try {
+      const text = await AI.callGemini(prompt);
+      const cleaned = text.replace(/```json|```/g, '').trim();
+      const parsed = JSON.parse(cleaned);
+      const score = Math.max(0, Math.min(50, Math.round(Number(parsed.score) || 0)));
+      return { ok: true, score, feedback: String(parsed.feedback || '').slice(0, 200) };
+    } catch (e) {
+      console.error(e);
+      return { ok: false, message: 'AI evaluation failed — logged without the recall bonus.' };
+    }
+  },
+
   async reviewPlan(planSummary) {
     if (!AI.isConfigured()) {
       return { ok: false, message: 'Turn on AI in Settings and add a free Gemini key for prioritized, actionable suggestions on top of the checks above.' };

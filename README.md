@@ -149,6 +149,74 @@ and glances back at it (or switches away and back), she'll see it within
 about 15 seconds without doing anything. If the app's been sitting fully
 backgrounded for a while, opening it fresh syncs right away too.
 
+## Home screen — full redesign
+
+Rebuilt from the ground up with the visual language of the polished social
+apps you mentioned:
+
+- **Stats strip** — days together, week streak, token balance, and the
+  monthly competition all live in a horizontally-scrollable row of compact
+  chips up top now, instead of stacked full-width cards eating vertical
+  space before you even reach the feed.
+- **Quick actions row** — a circular, gradient-icon row (photo, rose,
+  flowers, kiss, love, thanks) styled like a stories bar — tap once to
+  send, no digging through button rows.
+- **Redesigned composer** — a rounded pill input anchored to your avatar
+  with an inline send button, instead of a boxy textarea-plus-buttons card.
+- **Redesigned feed cards** — larger avatars, a color-coded accent bar tied
+  to each person's tag color, cleaner type hierarchy, pill-shaped reaction
+  chips. Reacting no longer re-renders the whole page — it updates in
+  place, so you don't lose your scroll position.
+- **Double-tap to heart-react** — tap twice on any post's text or photo for
+  the classic double-tap heart burst, on top of the existing reaction
+  chips.
+
+## Kiss marks 💋
+
+Added as a fourth gift type alongside rose/flowers/love. Sending one gives
+it its own distinct animation — rather than reusing the falling-petals
+effect from the other gifts, kisses "stamp" onto the screen at random
+spots with a pop-and-fade, more like an actual lip print landing than
+something drifting down. Shows up for your partner the same way the other
+gifts do — immediately if they're on Home, next time they open/check the
+app otherwise.
+
+## New tab: Wellness
+
+Four sections, switchable with chips at the top:
+
+- **💧 Water** — confirm you hit your target (Women: 11.5 cups, Men: 15.5
+  cups shown in the confirmation) for +10 tokens, once per day per person.
+- **📚 Library** — a bookshelf per profile. Add a book (title, author,
+  page count), update pages read as you go for a progress bar and **1
+  token per page** — only for pages *newly* read since your last update,
+  correcting the number down doesn't claw tokens back. Switch to your
+  partner's shelf to browse (read-only) and tap a book to see how far
+  they've gotten.
+- **📖 Study** — log a subject and duration (5 tokens per 10 minutes).
+  Right after logging, it asks what you actually learned; if AI is on,
+  Gemini scores the accuracy/depth of your recall for up to 50 bonus
+  tokens. Skippable if you just want the base reward.
+- **🏃 Cardio** — log walking/running/swimming/cycling/rowing/other and a
+  duration, 1 token per 2 minutes.
+
+All of this lives in each profile's own data and syncs the same way plan
+and logs already do — no special setup needed.
+
+## Workout completion no longer re-shows the log form
+
+Finishing today's session now shows a clean "✅ Workout complete" card
+instead of immediately re-displaying the exercise list with fresh input
+fields — including one-tap buttons to send your partner a quick nudge
+("Your turn! 💪", "Beat my numbers today 😏", etc.) right from that screen.
+If you genuinely want to log a second session the same day, "Log another
+session today" is right there too.
+
+## Roulette wheel now shows the actual numbers
+
+Each segment displays its multiplier directly on the wheel (0x, 0.5x, 1x,
+1.5x, 2x, 5x in gold) instead of relying only on the legend below it.
+
 ## Profile panel scrolling, token rebalance, and a full Shop redesign
 
 **Profile panel** — was missing `max-height`/`overflow-y` entirely, so once

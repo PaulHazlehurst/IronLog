@@ -79,7 +79,13 @@ function defaultProfile() {
     settings: defaultProfileSettings(),
     tokens: 0,
     tokenLog: [],
-    shop: []
+    shop: [],
+    wellness: {
+      waterLog: {},      // { 'YYYY-MM-DD': true }
+      library: [],       // [{id, title, author, totalPages, pagesRead, addedAt}]
+      studyLog: [],       // [{id, subject, minutes, recallText, bonus, date, createdAt}]
+      cardioLog: []       // [{id, type, minutes, date, createdAt}]
+    }
   };
 }
 function defaultShared() { return { posts: [], specialDate: null, tokensPerWorkout: 12, tokensPerPR: 2, deletedProfiles: [], keepsakes: [] }; }
@@ -405,6 +411,81 @@ const Storage = {
       text: `redeemed "${item.name}" from ${ownerProfileName}'s shop for ${item.cost} tokens 🎁`
     });
     return { ok: true };
+  },
+
+  /* ---------------- WELLNESS ---------------- */
+  getWellness(profileName) {
+    const p = getAllProfilesRaw()[profileName];
+    return { waterLog: {}, library: [], studyLog: [], cardioLog: [], ...(p?.wellness || {}) };
+  },
+
+  hasRedeemedWaterToday() {
+    return !!Storage.getWellness(Profiles.activeName()).waterLog[isoDate()];
+  },
+  redeemWater() {
+    if (Storage.hasRedeemedWaterToday()) return { ok: false, message: 'Already redeemed today.' };
+    Profiles.updateActive(p => {
+      p.wellness = p.wellness || defaultProfile().wellness;
+      p.wellness.waterLog[isoDate()] = true;
+    });
+    Storage.addTokens(10, 'Drank enough water');
+    return { ok: true };
+  },
+
+  getLibrary(profileName) { return Storage.getWellness(profileName || Profiles.activeName()).library; },
+  addBook(title, author, totalPages) {
+    Profiles.updateActive(p => {
+      p.wellness = p.wellness || defaultProfile().wellness;
+      p.wellness.library = [...(p.wellness.library || []), {
+        id: uid(), title, author, totalPages: Math.max(1, totalPages), pagesRead: 0, addedAt: new Date().toISOString()
+      }];
+    });
+    notifyChanged();
+  },
+  removeBook(bookId) {
+    Profiles.updateActive(p => { p.wellness.library = (p.wellness.library || []).filter(b => b.id !== bookId); });
+    notifyChanged();
+  },
+  // Only awards tokens for the NEW pages since the last recorded value —
+  // correcting a number downward doesn't claw tokens back.
+  updateBookProgress(bookId, newPagesRead) {
+    const book = Storage.getLibrary(Profiles.activeName()).find(b => b.id === bookId);
+    if (!book) return { ok: false };
+    const clamped = Math.max(0, Math.min(book.totalPages, Math.round(newPagesRead)));
+    const delta = clamped - book.pagesRead;
+    Profiles.updateActive(p => {
+      const b = p.wellness.library.find(x => x.id === bookId);
+      if (b) b.pagesRead = clamped;
+    });
+    if (delta > 0) Storage.addTokens(delta, `Read ${delta} page${delta === 1 ? '' : 's'} of "${book.title}"`);
+    else notifyChanged();
+    return { ok: true, delta: Math.max(0, delta) };
+  },
+
+  getStudyLog() { return Storage.getWellness(Profiles.activeName()).studyLog.slice().reverse(); },
+  addStudySession(subject, minutes, recallText, bonus) {
+    const base = Math.round(minutes * 0.5);
+    Profiles.updateActive(p => {
+      p.wellness = p.wellness || defaultProfile().wellness;
+      p.wellness.studyLog = [...(p.wellness.studyLog || []), {
+        id: uid(), subject, minutes, recallText: recallText || '', bonus: bonus || 0, date: isoDate(), createdAt: new Date().toISOString()
+      }].slice(-200);
+    });
+    Storage.addTokens(base + (bonus || 0), `Studied ${subject} (${minutes}m)${bonus ? ` + ${bonus} recall bonus` : ''}`);
+    return base + (bonus || 0);
+  },
+
+  getCardioLog() { return Storage.getWellness(Profiles.activeName()).cardioLog.slice().reverse(); },
+  addCardioSession(type, minutes) {
+    const coins = Math.round(minutes * 0.5);
+    Profiles.updateActive(p => {
+      p.wellness = p.wellness || defaultProfile().wellness;
+      p.wellness.cardioLog = [...(p.wellness.cardioLog || []), {
+        id: uid(), type, minutes, date: isoDate(), createdAt: new Date().toISOString()
+      }].slice(-200);
+    });
+    Storage.addTokens(coins, `${type} for ${minutes}m`);
+    return coins;
   },
 
   wipeAll() {
