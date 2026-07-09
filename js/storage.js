@@ -25,8 +25,39 @@ const DB = {
 };
 
 const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
-const THEMES = ['iron', 'pink', 'night', 'sunset', 'neon', 'forest', 'holiday', 'winter', 'sabrina', 'taylor', 'light'];
+const MODES = ['dark', 'light', 'night'];
+const STYLES = ['iron', 'pink', 'neon', 'sunset', 'forest', 'holiday', 'winter', 'sabrina', 'taylor'];
 const FONT_STYLES = ['modern', 'playful', 'classic'];
+
+// Old versions stored one combined "theme" string. Splits it into a
+// mode (neutrals) + style (accent) so they can now be mixed independently.
+function deriveModeStyleFromLegacyTheme(theme) {
+  const map = {
+    light: { mode: 'light', style: 'iron' },
+    night: { mode: 'night', style: 'iron' },
+    iron: { mode: 'dark', style: 'iron' },
+    sabrina: { mode: 'light', style: 'sabrina' },
+    taylor: { mode: 'dark', style: 'taylor' }
+  };
+  if (map[theme]) return map[theme];
+  // pink, neon, sunset, forest, holiday, winter were all dark-based
+  return { mode: 'dark', style: STYLES.includes(theme) ? theme : 'iron' };
+}
+
+function migrateThemeSettings() {
+  const profiles = getAllProfilesRaw();
+  let changed = false;
+  Object.values(profiles).forEach(p => {
+    if (p.settings && p.settings.theme && !p.settings.style) {
+      const derived = deriveModeStyleFromLegacyTheme(p.settings.theme);
+      p.settings.mode = derived.mode;
+      p.settings.style = derived.style;
+      delete p.settings.theme;
+      changed = true;
+    }
+  });
+  if (changed) saveAllProfilesRaw(profiles);
+}
 
 function loadJSON(key, fallback) {
   try {
@@ -66,8 +97,8 @@ function defaultProfileSettings() {
   return {
     units: 'lb', bodyweight: 180, gender: 'male',
     barWeight: 45, availablePlates: [45, 35, 25, 10, 5, 2.5],
-    restTimerSound: true, manualLifts: {}, theme: 'iron', tagColor: null, fontStyle: 'modern',
-    ambientEffect: 'none', themesTried: ['iron'], avatarEmoji: null
+    restTimerSound: true, manualLifts: {}, mode: 'dark', style: 'iron', tagColor: null, fontStyle: 'modern',
+    ambientEffect: 'none', stylesTried: ['iron'], avatarEmoji: null
   };
 }
 function defaultProfile() {
@@ -91,7 +122,7 @@ function defaultProfile() {
 function defaultShared() { return { posts: [], specialDate: null, tokensPerWorkout: 12, tokensPerPR: 2, deletedProfiles: [], keepsakes: [] }; }
 function defaultDevice() { return { githubToken: '', githubGistId: '', githubLastSync: null, activeProfile: '', lastSeenPostsAtByProfile: {}, lastNotifiedAtByProfile: {}, aiProvider: 'gemini', aiApiKey: '', aiEnabled: false }; }
 
-const PROFILE_SETTING_KEYS = ['units', 'bodyweight', 'gender', 'barWeight', 'availablePlates', 'restTimerSound', 'manualLifts', 'theme', 'tagColor', 'fontStyle', 'ambientEffect', 'themesTried', 'avatarEmoji'];
+const PROFILE_SETTING_KEYS = ['units', 'bodyweight', 'gender', 'barWeight', 'availablePlates', 'restTimerSound', 'manualLifts', 'mode', 'style', 'tagColor', 'fontStyle', 'ambientEffect', 'stylesTried', 'avatarEmoji', 'theme'];
 const SHARED_SETTING_KEYS = ['specialDate', 'tokensPerWorkout', 'tokensPerPR'];
 const DEVICE_SETTING_KEYS = ['githubToken', 'githubGistId', 'githubLastSync', 'aiProvider', 'aiApiKey', 'aiEnabled'];
 
@@ -135,7 +166,7 @@ const Profiles = {
   list() { return Object.keys(getAllProfilesRaw()); },
 
   activeName() {
-    migrateLegacyIfNeeded();
+    migrateLegacyIfNeeded(); migrateThemeSettings();
     const device = getDeviceRaw();
     const names = Profiles.list();
     if (device.activeProfile && names.includes(device.activeProfile)) return device.activeProfile;
@@ -225,7 +256,7 @@ const Profiles = {
   },
 
   getActive() {
-    migrateLegacyIfNeeded();
+    migrateLegacyIfNeeded(); migrateThemeSettings();
     let profiles = getAllProfilesRaw();
     let name = Profiles.activeName();
     if (!name) {
@@ -248,7 +279,7 @@ const Profiles = {
 };
 
 const Storage = {
-  hasAnyProfile() { migrateLegacyIfNeeded(); return Profiles.list().length > 0; },
+  hasAnyProfile() { migrateLegacyIfNeeded(); migrateThemeSettings(); return Profiles.list().length > 0; },
 
   getPlan() { return Profiles.getActive().data.plan || emptyPlan(); },
   savePlan(plan) { Profiles.updateActive(p => p.plan = plan); notifyChanged(); },

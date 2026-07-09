@@ -1,5 +1,5 @@
 /* ============================================================
-   TOKENS — precision-instrument dark theme: cool graphite base,
+   TOKENS — precision-instrument base: cool graphite neutrals,
    signal-blue primary action, teal secondary/info, warm amber
    for caution states, gold reserved for tier badges. Numbers
    throughout the app render in a monospace face, like a lab
@@ -25,16 +25,38 @@
   --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
 }
 
-/* ---------------- THEME VARIANTS ---------------- */
-/* Default (no attribute, or data-theme="iron") uses the :root tokens above. */
+/* ============================================================
+   MODE — the neutrals only (background/surface/border/text).
+   Independent of style below, so any accent flavor can sit on
+   top of any mode: e.g. Light mode + Pink style, or Night mode
+   + Sunset style. No attribute (or data-mode="dark") uses the
+   :root neutrals above.
+   ============================================================ */
+[data-mode="light"] {
+  --bg: #F4F5F7;
+  --surface: #FFFFFF;
+  --surface-2: #EDEFF3;
+  --border: #DBDFE6;
+  --text: #1B1E24;
+  --text-dim: #667085;
+}
+[data-mode="light"] .card { box-shadow: 0 1px 3px rgba(20,24,32,0.08); }
+[data-mode="light"] .toast { box-shadow: 0 4px 16px rgba(20,24,32,0.18); }
 
-[data-theme="pink"] {
-  --bg: #17111A;
-  --surface: #1F1620;
-  --surface-2: #281C2A;
-  --border: #3A2A3D;
-  --text: #F3E9EE;
-  --text-dim: #A78F9E;
+[data-mode="night"] {
+  --bg: #000000;
+  --surface: #0A0A0B;
+  --surface-2: #131315;
+  --border: #232326;
+  --text: #E4E4E7;
+  --text-dim: #7C7C82;
+}
+
+/* ============================================================
+   STYLE — accent flavor only, layered on top of whichever mode
+   is active. "iron" (the default) uses the :root accent above.
+   ============================================================ */
+[data-style="pink"] {
   --accent: #F0559C;
   --accent-ink: #ffffff;
   --blue: #E88AC2;
@@ -43,28 +65,7 @@
   --gold: #D4A857;
 }
 
-[data-theme="night"] {
-  --bg: #000000;
-  --surface: #0A0A0B;
-  --surface-2: #131315;
-  --border: #232326;
-  --text: #E4E4E7;
-  --text-dim: #7C7C82;
-  --accent: #7B8794;
-  --accent-ink: #050506;
-  --blue: #5C6773;
-  --amber: #C79A5C;
-  --success: #4A9E6E;
-  --gold: #A99366;
-}
-
-[data-theme="sunset"] {
-  --bg: #1A1210;
-  --surface: #241814;
-  --surface-2: #2E1F19;
-  --border: #463026;
-  --text: #FBEDE3;
-  --text-dim: #C4A091;
+[data-style="sunset"] {
   --accent: #FF6B4A;
   --accent-ink: #ffffff;
   --blue: #FFB454;
@@ -73,13 +74,7 @@
   --gold: #FFC168;
 }
 
-[data-theme="neon"] {
-  --bg: #0D0A1A;
-  --surface: #15102A;
-  --surface-2: #1E1738;
-  --border: #372B5C;
-  --text: #F1EBFF;
-  --text-dim: #9A8FC2;
+[data-style="neon"] {
   --accent: #B14CFF;
   --accent-ink: #ffffff;
   --blue: #3DE8E0;
@@ -87,14 +82,9 @@
   --success: #3DE8A0;
   --gold: #FFD23F;
 }
+[data-mode="light"][data-style="neon"] { --blue: #0C8F86; }
 
-[data-theme="forest"] {
-  --bg: #10160F;
-  --surface: #171F15;
-  --surface-2: #1F2A1C;
-  --border: #34432E;
-  --text: #E9F2E3;
-  --text-dim: #97AD8C;
+[data-style="forest"] {
   --accent: #5EBF63;
   --accent-ink: #08120A;
   --blue: #6FBFAE;
@@ -103,13 +93,7 @@
   --gold: #C4A857;
 }
 
-[data-theme="holiday"] {
-  --bg: #12181A;
-  --surface: #182220;
-  --surface-2: #1F2C29;
-  --border: #33453E;
-  --text: #F5EFE6;
-  --text-dim: #9DB0A8;
+[data-style="holiday"] {
   --accent: #E0483F;
   --accent-ink: #ffffff;
   --blue: #4C9A6A;
@@ -118,13 +102,7 @@
   --gold: #E0B84A;
 }
 
-[data-theme="winter"] {
-  --bg: #0D1520;
-  --surface: #131E2C;
-  --surface-2: #192736;
-  --border: #2A3C4E;
-  --text: #EAF3FB;
-  --text-dim: #8BA3B8;
+[data-style="winter"] {
   --accent: #6FC3E8;
   --accent-ink: #071620;
   --blue: #9FD9F0;
@@ -132,14 +110,13 @@
   --success: #6FD4B8;
   --gold: #CFE8F5;
 }
+[data-mode="light"][data-style="winter"] {
+  --accent: #1D7FB0;
+  --blue: #3A93B0;
+  --accent-ink: #ffffff;
+}
 
-[data-theme="sabrina"] {
-  --bg: #FBEAEC;
-  --surface: #FFF4F5;
-  --surface-2: #FCE1E6;
-  --border: #E9B9C4;
-  --text: #4A1E29;
-  --text-dim: #936773;
+[data-style="sabrina"] {
   --accent: #C81F3C;
   --accent-ink: #ffffff;
   --blue: #A67C1E;
@@ -149,20 +126,10 @@
   --radius: 12px;
   --radius-sm: 8px;
 }
-[data-theme="sabrina"] .card {
-  border-top: 3px solid var(--gold);
-}
-[data-theme="sabrina"] .btn-primary {
-  box-shadow: 0 1px 0 rgba(74,30,41,0.2);
-}
+[data-style="sabrina"] .card { border-top: 3px solid var(--gold); }
+[data-style="sabrina"] .btn-primary { box-shadow: 0 1px 0 rgba(74,30,41,0.2); }
 
-[data-theme="taylor"] {
-  --bg: #1B1013;
-  --surface: #241318;
-  --surface-2: #2E1920;
-  --border: #4A2530;
-  --text: #F3E7D9;
-  --text-dim: #B79A8C;
+[data-style="taylor"] {
   --accent: #C9A227;
   --accent-ink: #1B1013;
   --blue: #A65D6E;
@@ -172,29 +139,9 @@
   --radius: 10px;
   --radius-sm: 7px;
 }
-[data-theme="taylor"] .card {
-  border-top: 1px solid var(--gold);
-}
-[data-theme="taylor"] .btn-primary {
-  letter-spacing: 0.03em;
-}
-
-[data-theme="light"] {
-  --bg: #F4F5F7;
-  --surface: #FFFFFF;
-  --surface-2: #EDEFF3;
-  --border: #DBDFE6;
-  --text: #1B1E24;
-  --text-dim: #667085;
-  --accent: #3D7BFF;
-  --accent-ink: #ffffff;
-  --blue: #0E9488;
-  --amber: #C77B0A;
-  --success: #16A34A;
-  --gold: #B8860B;
-}
-[data-theme="light"] .card { box-shadow: 0 1px 3px rgba(20,24,32,0.08); }
-[data-theme="light"] .toast { box-shadow: 0 4px 16px rgba(20,24,32,0.18); }
+[data-mode="light"][data-style="taylor"] { --accent: #A8860F; --accent-ink: #ffffff; }
+[data-style="taylor"] .card { border-top: 1px solid var(--gold); }
+[data-style="taylor"] .btn-primary { letter-spacing: 0.03em; }
 
 /* ---------------- FONT VARIANTS ---------------- */
 /* "modern" (default) uses the :root fonts above. */

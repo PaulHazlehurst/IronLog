@@ -37,9 +37,9 @@ function toast(msg) {
 }
 
 function fireConfetti() {
-  const theme = document.documentElement.dataset.theme;
-  if (theme === 'sabrina') { fireFalling('sabrina-pr'); return; }
-  if (theme === 'taylor') { fireFalling('taylor-pr'); return; }
+  const style = document.documentElement.dataset.style;
+  if (style === 'sabrina') { fireFalling('sabrina-pr'); return; }
+  if (style === 'taylor') { fireFalling('taylor-pr'); return; }
   const colors = ['#4C8DFF', '#F0559C', '#2FD4C0', '#FFA94D', '#8B7CF6', '#4ADE80'];
   const count = 24;
   for (let i = 0; i < count; i++) {
@@ -65,7 +65,8 @@ function fmtWeight(w, unit) { return `${w}${unit}`; }
 
 function applyTheme() {
   const s = Storage.getSettings();
-  document.documentElement.dataset.theme = s.theme || 'iron';
+  document.documentElement.dataset.mode = s.mode || 'dark';
+  document.documentElement.dataset.style = s.style || 'iron';
   document.documentElement.dataset.font = s.fontStyle || 'modern';
   applyAmbientEffect();
 }
@@ -101,7 +102,7 @@ function renderProfilePanel() {
       <select id="pushTargetSelect">${names.filter(n => n !== activeName).map(n => `<option>${n}</option>`).join('')}</select>
       <button class="btn btn-sm" id="pushPlanBtn">Push</button>
     </div>` : ''}
-    ${names.length > 0 ? `<h3>Theme</h3><div class="theme-swatches" id="themeSwatches"></div>` : ''}
+    ${names.length > 0 ? `<h3>Style <span class="exercise-meta">(accent color — pick a mode in Settings first)</span></h3><div class="theme-swatches" id="themeSwatches"></div>` : ''}
     ${names.length > 0 ? `<h3 style="margin-top:12px;">Font</h3><div class="builder-chip-group" id="fontSwatches"></div>` : ''}
     ${names.length > 0 ? `<h3 style="margin-top:12px;">Background effect</h3><div class="builder-chip-group" id="ambientSwatches"></div>` : ''}
     ${names.length > 0 ? `<h3 style="margin-top:12px;">Your color (used on Home posts)</h3><div class="theme-swatches" id="tagColorSwatches"></div>` : ''}
@@ -191,16 +192,17 @@ function renderProfilePanel() {
   };
   const swatchWrap = $('#themeSwatches');
   if (swatchWrap) {
-    const swatchColors = { iron: '#4C8DFF', pink: '#F0559C', night: '#7B8794', sunset: '#FF6B4A', neon: '#B14CFF', forest: '#5EBF63', holiday: '#E0483F', winter: '#6FC3E8', sabrina: '#C81F3C', taylor: '#C9A227', light: '#3D7BFF' };
-    THEMES.forEach(t => {
+    const swatchColors = { iron: '#4C8DFF', pink: '#F0559C', sunset: '#FF6B4A', neon: '#B14CFF', forest: '#5EBF63', holiday: '#E0483F', winter: '#6FC3E8', sabrina: '#C81F3C', taylor: '#C9A227' };
+    STYLES.forEach(t => {
       const sw = document.createElement('div');
-      sw.className = 'theme-swatch' + (settings.theme === t ? ' active' : '');
+      sw.className = 'theme-swatch' + (settings.style === t ? ' active' : '');
       sw.style.background = swatchColors[t];
       sw.title = t.charAt(0).toUpperCase() + t.slice(1);
       sw.onclick = () => {
-        const tried = [...new Set([...(settings.themesTried || []), t])];
-        Storage.saveSettings({ theme: t, themesTried: tried });
+        const tried = [...new Set([...(settings.stylesTried || []), t])];
+        Storage.saveSettings({ style: t, stylesTried: tried });
         applyTheme();
+        pushImmediate();
         renderProfilePanel();
       };
       swatchWrap.appendChild(sw);
@@ -2427,7 +2429,7 @@ function computeBadges(logs, plan, settings) {
     { icon: '🥇', label: 'New Max', unlocked: prCount >= 1, hint: 'Any PR' },
     { icon: '⚡', label: 'Serial PR Setter', unlocked: prCount >= 5, hint: '5 PRs' },
     { icon: '📈', label: 'Advanced Tier', unlocked: hasAdvancedTier(plan, logs, settings), hint: 'Advanced+ on any lift' },
-    { icon: '🎨', label: 'Explorer', unlocked: (settings.themesTried || []).length >= 3, hint: 'Try 3 themes' }
+    { icon: '🎨', label: 'Explorer', unlocked: (settings.stylesTried || []).length >= 3, hint: 'Try 3 styles' }
   ];
 }
 
@@ -2589,9 +2591,12 @@ function renderSettingsTab() {
   const panel = $('#panel-settings');
   panel.innerHTML = `
     <div class="card">
-      <h3>Appearance mode</h3>
-      <p class="helper-text">A quick shortcut to four core looks — the full set of themes (Sunset, Forest, Sabrina, Taylor, and more) is still in the profile panel, top right.</p>
+      <h3>Appearance</h3>
+      <p class="helper-text">Pick a base mode, then a style — the style's accent colors adapt to whichever mode you're on (e.g. Light mode + Pink style gives a light background with pink accents).</p>
+      <label style="margin-top:8px;">Mode</label>
       <div class="mode-toggle-row" id="modeToggleRow"></div>
+      <label style="margin-top:12px;">Style (accent)</label>
+      <div class="theme-swatches" id="settingsStyleSwatches"></div>
     </div>
     <div class="card">
       <h3>Units & profile</h3>
@@ -2680,25 +2685,42 @@ function renderSettingsTab() {
   const save = (mut) => { const cur = Storage.getSettings(); mut(cur); Storage.saveSettings(cur); toast('Saved.'); };
 
   const MODE_OPTIONS = [
-    { key: 'light', label: '☀️ Light', theme: 'light' },
-    { key: 'dark', label: '🌑 Dark', theme: 'iron' },
-    { key: 'neon', label: '💜 Neon', theme: 'neon' },
-    { key: 'pink', label: '💗 Pink', theme: 'pink' }
+    { key: 'light', label: '☀️ Light' },
+    { key: 'dark', label: '🌑 Dark' },
+    { key: 'night', label: '⚫ Night' }
   ];
   const modeWrap = $('#modeToggleRow');
   MODE_OPTIONS.forEach(m => {
     const btn = document.createElement('button');
-    btn.className = 'btn btn-sm mode-toggle-btn' + (s.theme === m.theme ? ' active' : '');
+    btn.className = 'btn btn-sm mode-toggle-btn' + ((s.mode || 'dark') === m.key ? ' active' : '');
     btn.textContent = m.label;
     btn.onclick = () => {
-      const tried = [...new Set([...(s.themesTried || []), m.theme])];
-      Storage.saveSettings({ theme: m.theme, themesTried: tried });
+      Storage.saveSettings({ mode: m.key });
       applyTheme();
       pushImmediate();
       renderSettingsTab();
     };
     modeWrap.appendChild(btn);
   });
+
+  const styleWrap = $('#settingsStyleSwatches');
+  if (styleWrap) {
+    const swatchColors = { iron: '#4C8DFF', pink: '#F0559C', sunset: '#FF6B4A', neon: '#B14CFF', forest: '#5EBF63', holiday: '#E0483F', winter: '#6FC3E8', sabrina: '#C81F3C', taylor: '#C9A227' };
+    STYLES.forEach(t => {
+      const sw = document.createElement('div');
+      sw.className = 'theme-swatch' + ((s.style || 'iron') === t ? ' active' : '');
+      sw.style.background = swatchColors[t];
+      sw.title = t.charAt(0).toUpperCase() + t.slice(1);
+      sw.onclick = () => {
+        const tried = [...new Set([...(s.stylesTried || []), t])];
+        Storage.saveSettings({ style: t, stylesTried: tried });
+        applyTheme();
+        pushImmediate();
+        renderSettingsTab();
+      };
+      styleWrap.appendChild(sw);
+    });
+  }
 
   $('#setUnits').onchange = e => save(s => s.units = e.target.value);
   $('#setBw').onchange = e => save(s => s.bodyweight = Number(e.target.value) || s.bodyweight);
@@ -2842,6 +2864,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
+  // Must run before applyTheme() — otherwise an existing user's saved
+  // theme hasn't been migrated to mode+style yet and this would flash
+  // the default look before correcting itself.
+  Storage.hasAnyProfile();
   applyTheme();
   renderProfileButton();
 
@@ -2852,5 +2878,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   lastAutoSyncCheck = Date.now();
   await syncNow(false);
+  migrateThemeSettings();
+  applyTheme();
   if (Storage.hasAnyProfile()) switchTab('home');
 });

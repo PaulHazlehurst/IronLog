@@ -149,6 +149,32 @@ and glances back at it (or switches away and back), she'll see it within
 about 15 seconds without doing anything. If the app's been sitting fully
 backgrounded for a while, opening it fresh syncs right away too.
 
+## Themes reworked into Mode + Style (they now combine)
+
+This was a real architecture change, not just a new option. Previously
+every theme was one fixed bundle — background, text, *and* accent color
+all locked together. Now there are two independent choices:
+
+- **Mode** (Settings → Appearance) — Light, Dark, or Night. Controls only
+  the neutrals: background, surface, text color.
+- **Style** (same card in Settings, or the profile panel) — Iron, Pink,
+  Neon, Sunset, Forest, Holiday, Winter, Sabrina, or Taylor. Controls only
+  the accent color and a few decorative touches.
+
+Pick any mode with any style — Light mode + Pink style genuinely gives you
+a light background with pink accents, not a fixed "Pink theme" that was
+always dark. A few styles (Winter's icy blue, Taylor's gold) get an
+automatically-adjusted accent specifically for Light mode, since the
+original color was tuned for a dark background and would've been too pale
+to read well on white — same style, same identity, just legible either way.
+
+**If you already had a theme picked**, it migrates automatically the first
+time you open the updated app — your old single theme splits into the
+matching mode + style pair (e.g., Sabrina becomes Light mode + Sabrina
+style, Taylor becomes Dark mode + Taylor style, Pink/Neon/Sunset/Forest/
+Holiday/Winter all become Dark mode + that style) so nothing resets or
+looks different unless you change it yourself.
+
 ## Ghost-text set inputs + rep range in Workout Mode
 
 Weight/reps/RPE fields now show the suggested numbers as grey placeholder
