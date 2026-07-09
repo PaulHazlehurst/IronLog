@@ -191,7 +191,7 @@ function renderProfilePanel() {
   };
   const swatchWrap = $('#themeSwatches');
   if (swatchWrap) {
-    const swatchColors = { iron: '#4C8DFF', pink: '#F0559C', night: '#7B8794', sunset: '#FF6B4A', neon: '#B14CFF', forest: '#5EBF63', holiday: '#E0483F', winter: '#6FC3E8', sabrina: '#C81F3C', taylor: '#C9A227' };
+    const swatchColors = { iron: '#4C8DFF', pink: '#F0559C', night: '#7B8794', sunset: '#FF6B4A', neon: '#B14CFF', forest: '#5EBF63', holiday: '#E0483F', winter: '#6FC3E8', sabrina: '#C81F3C', taylor: '#C9A227', light: '#3D7BFF' };
     THEMES.forEach(t => {
       const sw = document.createElement('div');
       sw.className = 'theme-swatch' + (settings.theme === t ? ' active' : '');
@@ -1982,7 +1982,7 @@ function renderTodayTab() {
       <h3>${ex.name} <span class="exercise-meta">· ${ex.muscle}</span></h3>
       ${lastEntry ? `<div class="prev-session">Last time: ${lastEntry.sets.map(s => `${s.weight}${ex.unit}×${s.reps}`).join(', ')} (avg RPE ${(lastEntry.sets.reduce((a,s)=>a+(Number(s.rpe)||8),0)/lastEntry.sets.length).toFixed(1)})</div>` : ''}
       <div class="rx-box ${upcomingType !== 'train' ? upcomingType : ''}">
-        Target: <strong>${rx.sets} × ${rx.reps} @ ${fmtWeight(rx.weight, ex.unit)}</strong><br>${rx.note}
+        Target: <strong>${rx.sets} × ${rx.reps} @ ${fmtWeight(rx.weight, ex.unit)}</strong> <span class="exercise-meta">(rep range: ${ex.repLow}-${ex.repHigh})</span><br>${rx.note}
       </div>
       ${plateauMsg ? `<div class="plateau-banner">⚠ ${plateauMsg} <button class="btn btn-sm" data-act="ai-swap" style="margin-top:6px;">Suggest a swap</button></div>` : ''}
       <div class="warmup-list" data-act="warmup"></div>
@@ -2056,9 +2056,9 @@ function renderTodayTab() {
     finalizeSession(templateDay, exercises, logs, (exId) => {
       const card = list.querySelector(`.card[data-exercise-id="${exId}"]`);
       return $all('.set-row:not(.set-header)', card).map(row => ({
-        weight: Number(row.querySelector('.set-weight').value) || 0,
-        reps: Number(row.querySelector('.set-reps').value) || 0,
-        rpe: Number(row.querySelector('.set-rpe').value) || 8
+        weight: readNumberInput(row.querySelector('.set-weight')),
+        reps: readNumberInput(row.querySelector('.set-reps')),
+        rpe: readNumberInput(row.querySelector('.set-rpe')) || 8
       }));
     }, chirp);
     renderTodayTab();
@@ -2187,9 +2187,9 @@ function saveWorkoutModeCurrentSets(exId) {
   const setsWrap = $('#wmSetsLog');
   if (!setsWrap) return;
   workoutMode.setsCache[exId] = $all('.set-row:not(.set-header)', setsWrap).map(row => ({
-    weight: Number(row.querySelector('.set-weight').value) || 0,
-    reps: Number(row.querySelector('.set-reps').value) || 0,
-    rpe: Number(row.querySelector('.set-rpe').value) || 8
+    weight: readNumberInput(row.querySelector('.set-weight')),
+    reps: readNumberInput(row.querySelector('.set-reps')),
+    rpe: readNumberInput(row.querySelector('.set-rpe')) || 8
   }));
 }
 
@@ -2211,7 +2211,8 @@ function renderWorkoutModeScreen(upcomingType, logs, settings) {
       <h2 class="wm-exercise-name">${ex.name}</h2>
       <div class="exercise-meta" style="text-align:center;">${ex.muscle}</div>
       <div class="rx-box ${upcomingType !== 'train' ? upcomingType : ''}" style="margin:16px auto;max-width:380px;text-align:center;">
-        Target: <strong>${rx.sets} × ${rx.reps} @ ${fmtWeight(rx.weight, ex.unit)}</strong><br>${rx.note}
+        Target: <strong>${rx.sets} × ${rx.reps} @ ${fmtWeight(rx.weight, ex.unit)}</strong><br>
+        <span class="exercise-meta">Aiming for ${ex.repLow}-${ex.repHigh} reps per set</span><br>${rx.note}
       </div>
       <div class="sets-log" id="wmSetsLog" style="max-width:420px;margin:0 auto;"></div>
       <div class="row" style="justify-content:center;margin-top:12px;">
@@ -2329,15 +2330,27 @@ function addSetRow(container, weight, reps, unit, rpe) {
   const row = document.createElement('div');
   row.className = 'set-row';
   const setNum = $all('.set-row:not(.set-header)', container).length + 1;
+  const rpeVal = rpe ?? 8;
   row.innerHTML = `
     <div class="set-number">${setNum}</div>
-    <div><input class="set-weight" type="number" value="${weight}" inputmode="decimal"></div>
-    <div><input class="set-reps" type="number" value="${reps}" inputmode="numeric"></div>
-    <div><input class="set-rpe" type="number" value="${rpe ?? 8}" min="1" max="10" step="0.5" inputmode="decimal"></div>
+    <div><input class="set-weight" type="number" placeholder="${weight}" inputmode="decimal"></div>
+    <div><input class="set-reps" type="number" placeholder="${reps}" inputmode="numeric"></div>
+    <div><input class="set-rpe" type="number" placeholder="${rpeVal}" min="1" max="10" step="0.5" inputmode="decimal"></div>
     <button type="button" class="set-remove" aria-label="Remove set" title="Remove set">×</button>
   `;
   row.querySelector('.set-remove').onclick = () => { row.remove(); renumberSets(container); };
   container.appendChild(row);
+}
+
+// Reads a number input's typed value, falling back to its placeholder
+// (the suggested/prescribed number) when left blank — so accepting a
+// suggestion silently still saves the right number, but typing "0"
+// explicitly is still respected rather than treated as "empty".
+function readNumberInput(inputEl) {
+  if (!inputEl) return 0;
+  const raw = inputEl.value.trim();
+  if (raw !== '') return Number(raw) || 0;
+  return Number(inputEl.placeholder) || 0;
 }
 
 /* ---------------- RECOVERY TAB ---------------- */
@@ -2576,6 +2589,11 @@ function renderSettingsTab() {
   const panel = $('#panel-settings');
   panel.innerHTML = `
     <div class="card">
+      <h3>Appearance mode</h3>
+      <p class="helper-text">A quick shortcut to four core looks — the full set of themes (Sunset, Forest, Sabrina, Taylor, and more) is still in the profile panel, top right.</p>
+      <div class="mode-toggle-row" id="modeToggleRow"></div>
+    </div>
+    <div class="card">
       <h3>Units & profile</h3>
       <div class="row">
         <div><label>Units</label><select id="setUnits"><option value="lb" ${s.units==='lb'?'selected':''}>lb</option><option value="kg" ${s.units==='kg'?'selected':''}>kg</option></select></div>
@@ -2660,6 +2678,28 @@ function renderSettingsTab() {
   `;
 
   const save = (mut) => { const cur = Storage.getSettings(); mut(cur); Storage.saveSettings(cur); toast('Saved.'); };
+
+  const MODE_OPTIONS = [
+    { key: 'light', label: '☀️ Light', theme: 'light' },
+    { key: 'dark', label: '🌑 Dark', theme: 'iron' },
+    { key: 'neon', label: '💜 Neon', theme: 'neon' },
+    { key: 'pink', label: '💗 Pink', theme: 'pink' }
+  ];
+  const modeWrap = $('#modeToggleRow');
+  MODE_OPTIONS.forEach(m => {
+    const btn = document.createElement('button');
+    btn.className = 'btn btn-sm mode-toggle-btn' + (s.theme === m.theme ? ' active' : '');
+    btn.textContent = m.label;
+    btn.onclick = () => {
+      const tried = [...new Set([...(s.themesTried || []), m.theme])];
+      Storage.saveSettings({ theme: m.theme, themesTried: tried });
+      applyTheme();
+      pushImmediate();
+      renderSettingsTab();
+    };
+    modeWrap.appendChild(btn);
+  });
+
   $('#setUnits').onchange = e => save(s => s.units = e.target.value);
   $('#setBw').onchange = e => save(s => s.bodyweight = Number(e.target.value) || s.bodyweight);
   $('#setTokensWorkout').onchange = e => save(s => s.tokensPerWorkout = Math.max(0, Number(e.target.value) || 0));

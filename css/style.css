@@ -179,6 +179,23 @@
   letter-spacing: 0.03em;
 }
 
+[data-theme="light"] {
+  --bg: #F4F5F7;
+  --surface: #FFFFFF;
+  --surface-2: #EDEFF3;
+  --border: #DBDFE6;
+  --text: #1B1E24;
+  --text-dim: #667085;
+  --accent: #3D7BFF;
+  --accent-ink: #ffffff;
+  --blue: #0E9488;
+  --amber: #C77B0A;
+  --success: #16A34A;
+  --gold: #B8860B;
+}
+[data-theme="light"] .card { box-shadow: 0 1px 3px rgba(20,24,32,0.08); }
+[data-theme="light"] .toast { box-shadow: 0 4px 16px rgba(20,24,32,0.18); }
+
 /* ---------------- FONT VARIANTS ---------------- */
 /* "modern" (default) uses the :root fonts above. */
 [data-font="playful"] {
@@ -406,6 +423,15 @@ input, select, textarea {
   font-size: 16px; /* 16px+ prevents iOS Safari from zooming the page on focus */
   width: 100%;
   max-width: 100%;
+}
+input::placeholder, textarea::placeholder {
+  color: var(--text-dim);
+  opacity: 0.75;
+}
+.set-row input::placeholder {
+  color: var(--text-dim);
+  opacity: 0.85;
+  font-family: var(--font-mono);
 }
 
 .pill {
@@ -1321,6 +1347,9 @@ textarea {
   font-size: 18px;
   cursor: pointer;
 }
+
+.mode-toggle-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.mode-toggle-btn.active { border-color: var(--accent); background: var(--surface-2); color: var(--text); box-shadow: 0 0 0 1px var(--accent); }
 
 /* ============================================================
    REASONS WHY

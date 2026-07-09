@@ -149,6 +149,29 @@ and glances back at it (or switches away and back), she'll see it within
 about 15 seconds without doing anything. If the app's been sitting fully
 backgrounded for a while, opening it fresh syncs right away too.
 
+## Ghost-text set inputs + rep range in Workout Mode
+
+Weight/reps/RPE fields now show the suggested numbers as grey placeholder
+text instead of pre-filled values — the field is visually empty until you
+actually type in it. Leaving one blank and saving still records the
+suggested number (it doesn't silently save as 0), so you don't have to
+retype identical numbers every set; typing an actual different number
+(including a genuine 0) always overrides it. Workout Mode's target box (and
+the regular Today tab, for consistency) now also shows the exercise's full
+rep range, not just the specific number targeted this session.
+
+## Appearance modes
+
+Settings → Appearance mode: four quick-shortcut buttons (Light, Dark,
+Neon, Pink) mapped onto the existing theme system rather than a separate
+mechanism — Dark is Iron, Neon and Pink are the themes of the same name.
+**Light is genuinely new** — a real light-mode palette (white/near-white
+background, dark text), distinct from Sabrina's blush-pink glam look which
+happens to also be light but is its own aesthetic. The full theme list
+(Sunset, Forest, Sabrina, Taylor, Holiday, Winter, and the rest) is still
+in the profile panel — this is a faster path to the four most common
+picks, not a replacement for it.
+
 ## More gifts, plus a few things aimed squarely at her experience
 
 **Two more gift types**, each with a genuinely distinct animation rather
