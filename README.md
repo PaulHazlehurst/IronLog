@@ -175,6 +175,23 @@ style, Taylor becomes Dark mode + Taylor style, Pink/Neon/Sunset/Forest/
 Holiday/Winter all become Dark mode + that style) so nothing resets or
 looks different unless you change it yourself.
 
+## Preset questions can now suggest actual changes
+
+The Recovery and Split questions no longer just answer in text — when
+something's genuinely worth changing, the AI can now propose real,
+one-tap-away edits to your plan, using the same accept/dismiss suggestion
+cards already built for the main "Review my week" flow:
+
+- **Remove** or **add** an exercise on a specific day (already existed)
+- **Move** — relocate one exercise to a different day (new)
+- **Swap days** — swap two entire days' workouts wholesale (new)
+
+Both new action types are also now available from the main "Review my
+week" AI summary too, not just the preset questions, since it's the same
+underlying suggestion system. The **Alignment** question stays purely
+informational (no AI, no suggestions) — it's a naming/data-consistency
+check, not something with an obvious one-click fix.
+
 ## Fixed: preset question answer disappearing on every sync
 
 Same underlying issue as a couple of earlier fixes, just a spot I missed

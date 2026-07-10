@@ -23,6 +23,54 @@ const FALLBACK_TIPS = {
   Abs: ['Focus on curling the ribcage toward the pelvis rather than just lifting the shoulders off the floor.', 'Exhale hard at the point of peak contraction — it helps you actually feel the muscle working instead of just moving the weight.']
 };
 
+// Shared by reviewPlan and answerPresetQuestion — validates and sanitizes
+// AI-proposed plan changes. Supports: remove, add, adjust (sets/reps),
+// move (relocate one exercise to a different day), and swap_days (swap
+// two entire days' contents).
+function sanitizeSuggestions(rawSuggestions, allowedActions) {
+  const validDays = new Set(DAYS);
+  return (Array.isArray(rawSuggestions) ? rawSuggestions : [])
+    .filter(s => s && allowedActions.includes(s.action) && validDays.has(s.day))
+    .slice(0, 5)
+    .map(s => {
+      const base = { id: uid(), action: s.action, day: s.day, reason: String(s.reason || '').slice(0, 220), status: 'pending' };
+      if (s.action === 'add') {
+        const ex = s.newExercise || {};
+        if (!ex.name || !MUSCLES.includes(ex.muscle)) return null;
+        base.newExercise = {
+          name: String(ex.name).slice(0, 60),
+          muscle: ex.muscle,
+          type: ex.type === 'isolation' ? 'isolation' : 'compound',
+          lowerBody: !!ex.lowerBody,
+          sets: Math.max(1, Math.min(8, Number(ex.sets) || 3)),
+          repLow: Math.max(1, Math.min(30, Number(ex.repLow) || 8)),
+          repHigh: Math.max(1, Math.min(30, Number(ex.repHigh) || 12)),
+          currentWeight: Math.max(0, Number(ex.currentWeight) || 45)
+        };
+      } else if (s.action === 'swap_days') {
+        if (!validDays.has(s.dayB) || s.dayB === s.day) return null;
+        base.dayB = s.dayB;
+      } else if (s.action === 'move') {
+        if (!s.exerciseName || !validDays.has(s.toDay) || s.toDay === s.day) return null;
+        base.exerciseName = String(s.exerciseName).slice(0, 60);
+        base.toDay = s.toDay;
+      } else {
+        if (!s.exerciseName) return null;
+        base.exerciseName = String(s.exerciseName).slice(0, 60);
+        if (s.action === 'adjust') {
+          const c = s.changes || {};
+          base.changes = {};
+          if (c.sets !== undefined) base.changes.sets = Math.max(1, Math.min(8, Number(c.sets) || 3));
+          if (c.repLow !== undefined) base.changes.repLow = Math.max(1, Math.min(30, Number(c.repLow) || 8));
+          if (c.repHigh !== undefined) base.changes.repHigh = Math.max(1, Math.min(30, Number(c.repHigh) || 12));
+          if (Object.keys(base.changes).length === 0) return null;
+        }
+      }
+      return base;
+    })
+    .filter(Boolean);
+}
+
 const AI = {
   isConfigured() {
     const s = Storage.getSettings();
@@ -135,15 +183,30 @@ Respond with ONLY valid JSON, no markdown fences, no commentary, matching exactl
     if (!AI.isConfigured()) {
       return { ok: false, message: 'Turn on AI in Settings and add a Gemini key to ask this.' };
     }
-    const prompts = {
-      recovery: `You are a strength coach. Here is a lifter's weekly plan and some automatically-detected flags:\n\n${planSummary}\n\nAnswer specifically: how does the recovery time between sessions look for each muscle group? Call out any muscle trained on days too close together for its typical recovery window, and confirm what looks fine. Plain language, under 130 words, no disclaimers.`,
-      split: `You are a strength coach. Here is a lifter's weekly plan and some automatically-detected flags:\n\n${planSummary}\n\nAnswer specifically: how is this split structured (e.g. push/pull/legs, upper/lower, full body) and is the balance reasonable across days — not too much crammed into one day, nothing important starved of attention? Plain language, under 130 words, no disclaimers.`
-    };
-    const prompt = prompts[questionKey];
-    if (!prompt) return { ok: false, message: 'Unknown question.' };
+    const muscleList = MUSCLES.join(', ');
+    const dayList = DAYS.join(', ');
+    const focusText = {
+      recovery: 'how the recovery time between sessions looks for each muscle group — call out any muscle trained on days too close together for its typical recovery window, and confirm what looks fine',
+      split: "how this split is structured (e.g. push/pull/legs, upper/lower, full body) and whether the balance across days is reasonable — not too much crammed into one day, nothing important starved of attention"
+    }[questionKey];
+    if (!focusText) return { ok: false, message: 'Unknown question.' };
+
+    const prompt = `You are an experienced strength coach. Here is a lifter's weekly plan and some automatically-detected flags:
+
+${planSummary}
+
+Answer specifically: ${focusText}. Base any suggestion strictly on well-established resistance-training science (recovery windows, specificity, periodization) — don't invent problems if the plan is already reasonable.
+
+Respond with ONLY valid JSON, no markdown fences, no commentary, matching exactly this shape:
+{"answer":"2-4 plain-language sentences answering the question directly, no disclaimers","suggestions":[{"action":"remove","day":"Monday","exerciseName":"Exact existing exercise name","reason":"..."},{"action":"add","day":"Tuesday","newExercise":{"name":"Exercise name","muscle":"Back","type":"compound","lowerBody":false,"sets":3,"repLow":8,"repHigh":12,"currentWeight":45},"reason":"..."},{"action":"move","day":"Thursday","exerciseName":"Exact existing exercise name","toDay":"Friday","reason":"..."},{"action":"swap_days","day":"Tuesday","dayB":"Thursday","reason":"..."}]}
+Valid "action" values: "remove", "add", "move" (relocate one exercise to a different day), "swap_days" (swap two entire days' workouts). "day"/"dayB"/"toDay" must be exactly one of: ${dayList}. "muscle" (for add) must be exactly one of: ${muscleList}. "exerciseName" must exactly match an exercise name that appears in the plan above. At most 3 suggestions, only include ones that would genuinely help — use an empty array if nothing needs to change.`;
+
     try {
       const text = await AI.callGemini(prompt);
-      return { ok: true, text };
+      const cleaned = text.replace(/```json|```/g, '').trim();
+      const parsed = JSON.parse(cleaned);
+      const suggestions = sanitizeSuggestions(parsed.suggestions, ['remove', 'add', 'move', 'swap_days']);
+      return { ok: true, answer: String(parsed.answer || '').slice(0, 500), suggestions };
     } catch (e) {
       console.error(e);
       return { ok: false, message: 'AI call failed — try again in a moment.' };
@@ -163,47 +226,14 @@ Here is the plan and a list of automatically-detected flags:
 ${planSummary}
 
 Respond with ONLY valid JSON, no markdown fences, no commentary, matching exactly this shape:
-{"summary":"1-2 plain-language sentences on overall plan quality","suggestions":[{"action":"remove","day":"Monday","exerciseName":"Exact existing exercise name","reason":"One concise sentence naming the principle and why"},{"action":"add","day":"Tuesday","newExercise":{"name":"Exercise name","muscle":"Back","type":"compound","lowerBody":false,"sets":3,"repLow":8,"repHigh":12,"currentWeight":45},"reason":"..."},{"action":"adjust","day":"Wednesday","exerciseName":"Exact existing exercise name","changes":{"sets":4,"repLow":6,"repHigh":10},"reason":"..."}]}
-Valid "action" values: "remove", "add", "adjust". "day" must be exactly one of: ${dayList}. "muscle" (for add) must be exactly one of: ${muscleList}. "exerciseName" for remove/adjust must exactly match an exercise name that appears in the plan above. Only include fields that are changing inside "changes" for adjust. Limit to at most 5 suggestions, prioritized by importance. Use an empty array if you have no changes to suggest.`;
+{"summary":"1-2 plain-language sentences on overall plan quality","suggestions":[{"action":"remove","day":"Monday","exerciseName":"Exact existing exercise name","reason":"One concise sentence naming the principle and why"},{"action":"add","day":"Tuesday","newExercise":{"name":"Exercise name","muscle":"Back","type":"compound","lowerBody":false,"sets":3,"repLow":8,"repHigh":12,"currentWeight":45},"reason":"..."},{"action":"adjust","day":"Wednesday","exerciseName":"Exact existing exercise name","changes":{"sets":4,"repLow":6,"repHigh":10},"reason":"..."},{"action":"move","day":"Thursday","exerciseName":"Exact existing exercise name","toDay":"Friday","reason":"..."},{"action":"swap_days","day":"Tuesday","dayB":"Thursday","reason":"..."}]}
+Valid "action" values: "remove", "add", "adjust", "move" (relocate one exercise to a different day), "swap_days" (swap two entire days' workouts). "day"/"dayB"/"toDay" must be exactly one of: ${dayList}. "muscle" (for add) must be exactly one of: ${muscleList}. "exerciseName" for remove/adjust/move must exactly match an exercise name that appears in the plan above. Only include fields that are changing inside "changes" for adjust. Limit to at most 5 suggestions, prioritized by importance. Use an empty array if you have no changes to suggest.`;
 
     try {
       const text = await AI.callGemini(prompt);
       const cleaned = text.replace(/```json|```/g, '').trim();
       const parsed = JSON.parse(cleaned);
-      const validDays = new Set(DAYS);
-      const suggestions = (Array.isArray(parsed.suggestions) ? parsed.suggestions : [])
-        .filter(s => s && ['remove', 'add', 'adjust'].includes(s.action) && validDays.has(s.day))
-        .slice(0, 5)
-        .map((s, i) => {
-          const base = { id: `sugg-${i}`, action: s.action, day: s.day, reason: String(s.reason || '').slice(0, 220), status: 'pending' };
-          if (s.action === 'add') {
-            const ex = s.newExercise || {};
-            if (!ex.name || !MUSCLES.includes(ex.muscle)) return null;
-            base.newExercise = {
-              name: String(ex.name).slice(0, 60),
-              muscle: ex.muscle,
-              type: ex.type === 'isolation' ? 'isolation' : 'compound',
-              lowerBody: !!ex.lowerBody,
-              sets: Math.max(1, Math.min(8, Number(ex.sets) || 3)),
-              repLow: Math.max(1, Math.min(30, Number(ex.repLow) || 8)),
-              repHigh: Math.max(1, Math.min(30, Number(ex.repHigh) || 12)),
-              currentWeight: Math.max(0, Number(ex.currentWeight) || 45)
-            };
-          } else {
-            if (!s.exerciseName) return null;
-            base.exerciseName = String(s.exerciseName).slice(0, 60);
-            if (s.action === 'adjust') {
-              const c = s.changes || {};
-              base.changes = {};
-              if (c.sets !== undefined) base.changes.sets = Math.max(1, Math.min(8, Number(c.sets) || 3));
-              if (c.repLow !== undefined) base.changes.repLow = Math.max(1, Math.min(30, Number(c.repLow) || 8));
-              if (c.repHigh !== undefined) base.changes.repHigh = Math.max(1, Math.min(30, Number(c.repHigh) || 12));
-              if (Object.keys(base.changes).length === 0) return null;
-            }
-          }
-          return base;
-        })
-        .filter(Boolean);
+      const suggestions = sanitizeSuggestions(parsed.suggestions, ['remove', 'add', 'adjust', 'move', 'swap_days']);
       return { ok: true, summary: String(parsed.summary || '').slice(0, 400), suggestions };
     } catch (e) {
       console.error(e);

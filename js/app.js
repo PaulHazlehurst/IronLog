@@ -1814,43 +1814,51 @@ function renderBuilderPreview(container, generatedPlan, unit) {
 }
 
 let reviewState = { findings: null, summary: '', suggestions: [] };
-let presetQuestionState = { question: '', resultHTML: '' };
+let presetQuestionState = { questionLabel: '', question: '', answer: '', suggestions: [] };
 
 function renderPresetQuestionResult() {
   const resultEl = $('#presetQuestionResult');
   const select = $('#presetQuestionSelect');
   if (!resultEl) return;
-  resultEl.innerHTML = presetQuestionState.resultHTML || '';
   if (select && presetQuestionState.question) select.value = presetQuestionState.question;
+  if (!presetQuestionState.answer) { resultEl.innerHTML = ''; return; }
+  resultEl.innerHTML = `<div class="ai-tip"><span class="tag">${escapeHtml(presetQuestionState.questionLabel)}</span>${escapeHtml(presetQuestionState.answer)}</div><div id="presetSuggestionList"></div>`;
+  const listWrap = $('#presetSuggestionList');
+  presetQuestionState.suggestions.forEach(s => listWrap.appendChild(renderSuggestionCard(s)));
 }
 
 async function askPresetQuestion(plan) {
   const select = $('#presetQuestionSelect');
   const question = select.value;
-  const resultEl = $('#presetQuestionResult');
   if (!question) { toast('Pick a question first.'); return; }
   presetQuestionState.question = question;
+  presetQuestionState.questionLabel = select.options[select.selectedIndex].text;
 
   if (question === 'alignment') {
     const findings = PlanReview.checkAlignment(plan);
-    presetQuestionState.resultHTML = findings.length
-      ? `<div class="ai-tip"><span class="tag">Exercise alignment</span><ul style="margin:6px 0 0;padding-left:18px;">${findings.map(f => `<li style="margin-bottom:4px;">${escapeHtml(f)}</li>`).join('')}</ul></div>`
-      : `<div class="ai-tip"><span class="tag">Exercise alignment</span>Everything lines up — no naming or muscle-group mismatches found across repeated exercises.</div>`;
-    resultEl.innerHTML = presetQuestionState.resultHTML;
+    presetQuestionState.answer = findings.length
+      ? findings.join(' ')
+      : 'Everything lines up — no naming or muscle-group mismatches found across repeated exercises.';
+    presetQuestionState.suggestions = [];
+    renderPresetQuestionResult();
     return;
   }
 
   const askBtn = $('#askPresetBtn');
   askBtn.disabled = true; askBtn.textContent = 'Asking…';
-  resultEl.innerHTML = `<p class="helper-text">Thinking…</p>`;
+  $('#presetQuestionResult').innerHTML = `<p class="helper-text">Thinking…</p>`;
   const findings = PlanReview.analyze(plan);
   const summary = PlanReview.toPromptSummary(plan, findings);
   const res = await AI.answerPresetQuestion(question, summary);
   askBtn.disabled = false; askBtn.textContent = 'Ask';
-  presetQuestionState.resultHTML = res.ok
-    ? `<div class="ai-tip"><span class="tag">${select.options[select.selectedIndex].text}</span>${escapeHtml(res.text)}</div>`
-    : `<p class="helper-text">${escapeHtml(res.message)}</p>`;
-  resultEl.innerHTML = presetQuestionState.resultHTML;
+  if (res.ok) {
+    presetQuestionState.answer = res.answer;
+    presetQuestionState.suggestions = res.suggestions;
+  } else {
+    presetQuestionState.answer = res.message;
+    presetQuestionState.suggestions = [];
+  }
+  renderPresetQuestionResult();
 }
 
 function runPlanReview(plan) {
@@ -1892,11 +1900,15 @@ function renderReviewResults(loading) {
 function renderSuggestionCard(s) {
   const card = document.createElement('div');
   card.className = 'card suggestion-card';
-  const badgeClass = s.action === 'remove' ? 'sugg-remove' : s.action === 'add' ? 'sugg-add' : 'sugg-adjust';
-  const badgeLabel = s.action === 'remove' ? 'Remove' : s.action === 'add' ? 'Add' : 'Adjust';
+  const badgeMap = { remove: 'sugg-remove', add: 'sugg-add', adjust: 'sugg-adjust', move: 'sugg-adjust', swap_days: 'sugg-adjust' };
+  const labelMap = { remove: 'Remove', add: 'Add', adjust: 'Adjust', move: 'Move', swap_days: 'Swap days' };
+  const badgeClass = badgeMap[s.action] || 'sugg-adjust';
+  const badgeLabel = labelMap[s.action] || 'Change';
   let title = '';
   if (s.action === 'add') title = `${s.newExercise.name} — ${s.day}`;
   else if (s.action === 'remove') title = `${s.exerciseName} — ${s.day}`;
+  else if (s.action === 'move') title = `${s.exerciseName}: ${s.day} → ${s.toDay}`;
+  else if (s.action === 'swap_days') title = `Swap ${s.day} and ${s.dayB}`;
   else title = `${s.exerciseName} — ${s.day} (${Object.entries(s.changes).map(([k, v]) => `${k}: ${v}`).join(', ')})`;
 
   card.innerHTML = `
@@ -1931,7 +1943,7 @@ function renderSuggestionCard(s) {
     const dismissBtn = document.createElement('button');
     dismissBtn.className = 'btn btn-sm';
     dismissBtn.textContent = 'Dismiss';
-    dismissBtn.onclick = () => { s.status = 'dismissed'; renderReviewResults(false); };
+    dismissBtn.onclick = () => { s.status = 'dismissed'; renderPlanTab(); };
     actions.appendChild(acceptBtn);
     actions.appendChild(dismissBtn);
   }
@@ -1940,6 +1952,16 @@ function renderSuggestionCard(s) {
 
 function applySuggestion(s) {
   const plan = Storage.getPlan();
+
+  if (s.action === 'swap_days') {
+    const a = plan.days[s.day] || [];
+    const b = plan.days[s.dayB] || [];
+    plan.days[s.day] = b;
+    plan.days[s.dayB] = a;
+    Storage.savePlan(plan);
+    return { ok: true };
+  }
+
   const list = plan.days[s.day] || (plan.days[s.day] = []);
   if (s.action === 'add') {
     const settings = Storage.getSettings();
@@ -1953,6 +1975,10 @@ function applySuggestion(s) {
     list.splice(idx, 1);
   } else if (s.action === 'adjust') {
     Object.assign(list[idx], s.changes);
+  } else if (s.action === 'move') {
+    const [moved] = list.splice(idx, 1);
+    if (!plan.days[s.toDay]) plan.days[s.toDay] = [];
+    plan.days[s.toDay].push(moved);
   }
   Storage.savePlan(plan);
   return { ok: true };
