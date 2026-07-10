@@ -175,6 +175,50 @@ style, Taylor becomes Dark mode + Taylor style, Pink/Neon/Sunset/Forest/
 Holiday/Winter all become Dark mode + that style) so nothing resets or
 looks different unless you change it yourself.
 
+## Roulette — found and fixed a real display bug, plus your new spec
+
+The actual bug: the "🎟️ N spins available" text never updated after a
+spin — only the button's disabled state did, so the number stayed stale
+while the button quietly became unusable. That mismatch was almost
+certainly what felt "screwed up." Fixed — the count now updates in place
+every time, same as the balance already did.
+
+Implemented on top of that: **2 free spins a day** (up from 1), respins
+confirmed to touch nothing — no coins, doesn't consume a spin — and PRs
+still grant +1 bonus spin each, unchanged.
+
+**On the PR coin amount:** the code default is already 2 (set a couple of
+rounds ago), but that only applies to brand-new setups — it can't reach
+into your browser and overwrite a value you'd already saved. If your app
+is still showing a different number, go to **Settings → Token economy →
+Bonus tokens per PR** and set it to 2 yourself. That's the one settings
+field my code changes genuinely can't touch for you.
+
+## Two small "above and beyond" additions — and why I didn't reach further
+
+You asked specifically whether an external import would be worth it here.
+Honest answer: **not really, for this app** — here's the actual tradeoff.
+A library like canvas-confetti or a Lottie animation player would add a
+real external dependency (extra network request, needs the service worker
+cache updated, some risk if the CDN's ever unreachable on first install)
+for a visual improvement that's marginal on top of what's already
+hand-built (confetti, kiss stamps, hug pulses, hype bursts, the garden
+sway). Given you said not to diverge too much, I didn't think that
+trade was worth it.
+
+What I did add — both reuse patterns already in the app, so the
+incremental cost is close to zero:
+
+- **Sound effects** (Settings, off by default) — small synthesized chimes
+  (a few oscillator notes, same technique as the existing rest-timer beep)
+  for sending a gift, hitting a PR, and roulette jackpots. Zero audio
+  files, nothing to download or cache — it's pure code, so the storage
+  cost is effectively nothing.
+- **A fourth font style, Handwritten** — same font-picker mechanism as
+  Modern/Playful/Classic, just one more Google Fonts option (Caveat, a
+  warm script face). Same caching pattern as the fonts already loaded, so
+  no new infrastructure, just one more choice.
+
 ## Critical fix: the date bug behind three separate symptoms
 
 Traced all three of these back to the same root cause: the app was

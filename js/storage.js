@@ -27,7 +27,7 @@ const DB = {
 const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 const MODES = ['dark', 'light', 'night'];
 const STYLES = ['iron', 'pink', 'neon', 'sunset', 'forest', 'holiday', 'winter', 'sabrina', 'taylor'];
-const FONT_STYLES = ['modern', 'playful', 'classic'];
+const FONT_STYLES = ['modern', 'playful', 'classic', 'handwritten'];
 
 // Old versions stored one combined "theme" string. Splits it into a
 // mode (neutrals) + style (accent) so they can now be mixed independently.
@@ -98,7 +98,7 @@ function defaultProfileSettings() {
     units: 'lb', bodyweight: 180, gender: 'male',
     barWeight: 45, availablePlates: [45, 35, 25, 10, 5, 2.5],
     restTimerSound: true, manualLifts: {}, mode: 'dark', style: 'iron', tagColor: null, fontStyle: 'modern',
-    ambientEffect: 'none', stylesTried: ['iron'], avatarEmoji: null
+    ambientEffect: 'none', stylesTried: ['iron'], avatarEmoji: null, soundEffects: false
   };
 }
 function defaultProfile() {
@@ -124,7 +124,7 @@ function defaultProfile() {
 function defaultShared() { return { posts: [], specialDate: null, tokensPerWorkout: 12, tokensPerPR: 2, deletedProfiles: [], keepsakes: [] }; }
 function defaultDevice() { return { githubToken: '', githubGistId: '', githubLastSync: null, activeProfile: '', lastSeenPostsAtByProfile: {}, lastNotifiedAtByProfile: {}, aiProvider: 'gemini', aiApiKey: '', aiEnabled: false }; }
 
-const PROFILE_SETTING_KEYS = ['units', 'bodyweight', 'gender', 'barWeight', 'availablePlates', 'restTimerSound', 'manualLifts', 'mode', 'style', 'tagColor', 'fontStyle', 'ambientEffect', 'stylesTried', 'avatarEmoji', 'theme'];
+const PROFILE_SETTING_KEYS = ['units', 'bodyweight', 'gender', 'barWeight', 'availablePlates', 'restTimerSound', 'manualLifts', 'mode', 'style', 'tagColor', 'fontStyle', 'ambientEffect', 'stylesTried', 'avatarEmoji', 'theme', 'soundEffects'];
 const SHARED_SETTING_KEYS = ['specialDate', 'tokensPerWorkout', 'tokensPerPR'];
 const DEVICE_SETTING_KEYS = ['githubToken', 'githubGistId', 'githubLastSync', 'aiProvider', 'aiApiKey', 'aiEnabled'];
 
@@ -466,7 +466,7 @@ const Storage = {
     const today = isoDate();
     if (data.lastFreeSpinGrantDate === today) return;
     Profiles.updateActive(p => {
-      p.spinTokens = (p.spinTokens || 0) + 1;
+      p.spinTokens = (p.spinTokens || 0) + 2;
       p.lastFreeSpinGrantDate = today;
     });
     notifyChanged();

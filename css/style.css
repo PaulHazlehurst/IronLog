@@ -151,6 +151,9 @@
 [data-font="classic"] {
   --font-display: 'Fraunces', serif;
 }
+[data-font="handwritten"] {
+  --font-display: 'Caveat', cursive;
+}
 
 * { box-sizing: border-box; }
 html {

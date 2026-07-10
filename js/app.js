@@ -210,8 +210,8 @@ function renderProfilePanel() {
   }
   const fontWrap = $('#fontSwatches');
   if (fontWrap) {
-    const fontLabels = { modern: 'Modern', playful: 'Playful', classic: 'Classic' };
-    const fontFamilies = { modern: "'Space Grotesk', sans-serif", playful: "'Baloo 2', sans-serif", classic: "'Fraunces', serif" };
+    const fontLabels = { modern: 'Modern', playful: 'Playful', classic: 'Classic', handwritten: 'Handwritten' };
+    const fontFamilies = { modern: "'Space Grotesk', sans-serif", playful: "'Baloo 2', sans-serif", classic: "'Fraunces', serif", handwritten: "'Caveat', cursive" };
     FONT_STYLES.forEach(f => {
       const chip = document.createElement('button');
       chip.type = 'button';
@@ -505,8 +505,8 @@ function renderShopTab() {
     </div>
     <div class="card" style="text-align:center;">
       <h3>🎰 Token Roulette</h3>
-      <p class="helper-text">Land on ↻ and it's a free respin — no coins won or lost. One spin a day, free; earn more by hitting a PR.</p>
-      <div class="helper-text" style="margin-top:2px;">🎟️ ${spins} spin${spins === 1 ? '' : 's'} available</div>
+      <p class="helper-text">Land on ↻ and it's a free respin — nothing won, nothing lost, doesn't use up a spin. 2 free spins a day; earn more by hitting a PR.</p>
+      <div class="helper-text" id="spinCountDisplay" style="margin-top:2px;">🎟️ ${spins} spin${spins === 1 ? '' : 's'} available</div>
       <div class="roulette-wrap">
         <div class="roulette-pointer">▼</div>
         ${buildWheelSVG()}
@@ -599,6 +599,7 @@ function spinRoulette() {
       if (multiplier >= 5) {
         resultEl.innerHTML = `<span style="color:var(--gold);font-weight:600;">🎉 JACKPOT! 5x — won ${winnings} tokens!</span>`;
         fireConfetti();
+        playChime('jackpot');
         const settings = Storage.getSettings();
         const { name: activeName } = Profiles.getActive();
         Storage.addPost({ type: 'comment', authorProfile: activeName, authorColor: settings.tagColor, text: `hit the roulette JACKPOT and won ${winnings} tokens! 🎰🎉` });
@@ -616,6 +617,8 @@ function spinRoulette() {
     const newSpins = Storage.getSpinTokens();
     const balanceNumEl = $('.token-teaser-num', panelShopEl());
     if (balanceNumEl) balanceNumEl.textContent = newBalance;
+    const spinCountEl = $('#spinCountDisplay', panelShopEl());
+    if (spinCountEl) spinCountEl.textContent = `🎟️ ${newSpins} spin${newSpins === 1 ? '' : 's'} available`;
     wagerInput.max = Math.max(1, newBalance);
     wagerInput.value = Math.min(Number(wagerInput.value) || 10, Math.max(1, newBalance));
     wagerInput.disabled = newBalance < 1 || newSpins < 1;
@@ -1343,6 +1346,7 @@ function renderHomeTab() {
       else if (key === 'hug') fireHugPulse();
       else if (key === 'hype') fireHypeBurst();
       else fireFalling(key);
+      playChime('gift');
       toast(`${gift.emoji} Sent!`);
       pushImmediate();
       renderHomeTab();
@@ -2183,7 +2187,7 @@ function finalizeSession(templateDay, exercises, logs, getSetsForExercise, chirp
   toast(prCount > 0
     ? `Session saved. <span class="pr-toast-badge">${prCount} New PR${prCount > 1 ? 's' : ''}!</span> +${tokensEarned} <span class="coin-badge" style="width:13px;height:13px;"></span>`
     : `Session saved. +${tokensEarned} <span class="coin-badge" style="width:13px;height:13px;"></span> — next week's targets will update from this.`);
-  if (prCount > 0) fireConfetti();
+  if (prCount > 0) { fireConfetti(); playChime('pr'); }
   pushImmediate();
   return { prCount, tokensEarned };
 }
@@ -2399,6 +2403,35 @@ function beep() {
     o.frequency.value = 880;
     g.gain.setValueAtTime(0.15, ctx.currentTime);
     o.start(); o.stop(ctx.currentTime + 0.3);
+  } catch (e) { /* audio not available, ignore */ }
+}
+
+// Small synthesized sound effects — no audio files, no libraries, just a
+// few oscillator notes per chime. Opt-in via Settings (off by default).
+function playChime(type) {
+  if (!Storage.getSettings().soundEffects) return;
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const now = ctx.currentTime;
+    const note = (freq, start, dur, peak = 0.12) => {
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = 'sine';
+      o.connect(g); g.connect(ctx.destination);
+      o.frequency.value = freq;
+      g.gain.setValueAtTime(0, now + start);
+      g.gain.linearRampToValueAtTime(peak, now + start + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.001, now + start + dur);
+      o.start(now + start);
+      o.stop(now + start + dur + 0.05);
+    };
+    if (type === 'gift') {
+      note(880, 0, 0.18); note(1174.66, 0.09, 0.22);
+    } else if (type === 'pr') {
+      note(523.25, 0, 0.14); note(659.25, 0.1, 0.14); note(783.99, 0.2, 0.22);
+    } else if (type === 'jackpot') {
+      note(523.25, 0, 0.12); note(659.25, 0.08, 0.12); note(783.99, 0.16, 0.12); note(1046.5, 0.24, 0.3, 0.16);
+    }
   } catch (e) { /* audio not available, ignore */ }
 }
 
@@ -2725,6 +2758,7 @@ function renderSettingsTab() {
       </div>
       <div class="row">
         <div><label>Rest timer sound</label><select id="setRestSound"><option value="true" ${s.restTimerSound?'selected':''}>On</option><option value="false" ${!s.restTimerSound?'selected':''}>Off</option></select></div>
+        <div><label>Sound effects (gifts, PRs, jackpots)</label><select id="setSoundEffects"><option value="false" ${!s.soundEffects?'selected':''}>Off</option><option value="true" ${s.soundEffects?'selected':''}>On</option></select></div>
       </div>
     </div>
     <div class="card">
@@ -2849,6 +2883,7 @@ function renderSettingsTab() {
   $('#setBar').onchange = e => save(s => s.barWeight = Number(e.target.value) || s.barWeight);
   $('#setPlates').onchange = e => save(s => s.availablePlates = e.target.value.split(',').map(v => Number(v.trim())).filter(Boolean).sort((a,b)=>b-a));
   $('#setRestSound').onchange = e => save(s => s.restTimerSound = e.target.value === 'true');
+  $('#setSoundEffects').onchange = e => save(s => s.soundEffects = e.target.value === 'true');
   $('#setDeload').onchange = e => { const c = Storage.getCycle(); c.deloadEvery = Math.max(2, Number(e.target.value) || 5); Storage.saveCycle(c); renderWeekDial(); toast('Saved.'); };
   $('#setPeak').onchange = e => { const c = Storage.getCycle(); c.peakEvery = Math.max(0, Number(e.target.value) || 0); Storage.saveCycle(c); toast('Saved.'); };
 
