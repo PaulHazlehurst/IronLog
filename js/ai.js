@@ -131,6 +131,25 @@ Respond with ONLY valid JSON, no markdown fences, no commentary, matching exactl
     }
   },
 
+  async answerPresetQuestion(questionKey, planSummary) {
+    if (!AI.isConfigured()) {
+      return { ok: false, message: 'Turn on AI in Settings and add a Gemini key to ask this.' };
+    }
+    const prompts = {
+      recovery: `You are a strength coach. Here is a lifter's weekly plan and some automatically-detected flags:\n\n${planSummary}\n\nAnswer specifically: how does the recovery time between sessions look for each muscle group? Call out any muscle trained on days too close together for its typical recovery window, and confirm what looks fine. Plain language, under 130 words, no disclaimers.`,
+      split: `You are a strength coach. Here is a lifter's weekly plan and some automatically-detected flags:\n\n${planSummary}\n\nAnswer specifically: how is this split structured (e.g. push/pull/legs, upper/lower, full body) and is the balance reasonable across days — not too much crammed into one day, nothing important starved of attention? Plain language, under 130 words, no disclaimers.`
+    };
+    const prompt = prompts[questionKey];
+    if (!prompt) return { ok: false, message: 'Unknown question.' };
+    try {
+      const text = await AI.callGemini(prompt);
+      return { ok: true, text };
+    } catch (e) {
+      console.error(e);
+      return { ok: false, message: 'AI call failed — try again in a moment.' };
+    }
+  },
+
   async reviewPlan(planSummary) {
     if (!AI.isConfigured()) {
       return { ok: false, message: 'Turn on AI in Settings and add a free Gemini key for prioritized, actionable suggestions on top of the checks above.' };

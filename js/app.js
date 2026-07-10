@@ -263,21 +263,40 @@ function allPlanExercises() {
   const plan = Storage.getPlan();
   const seen = new Map();
   Object.entries(plan.days).forEach(([day, list]) => {
-    (list || []).forEach(ex => { if (!seen.has(ex.id)) seen.set(ex.id, { ...ex, day }); });
+    (list || []).forEach(ex => {
+      const key = normalizedExerciseName(ex.name);
+      if (!seen.has(key)) seen.set(key, { ...ex, day });
+    });
   });
   return [...seen.values()];
 }
 
-function logsForExercise(exId, logs) {
-  return logs
-    .map(l => ({ date: l.date, entry: (l.exercises || []).find(e => e.exerciseId === exId) }))
-    .filter(x => x.entry)
-    .sort((a, b) => new Date(a.date) - new Date(b.date))
-    .map(x => ({ date: x.date, ...x.entry }));
+function normalizedExerciseName(name) { return (name || '').trim().toLowerCase(); }
+
+// Every exercise slot across the whole plan that shares this name — e.g.
+// "Chest Press" on Monday, Wednesday, and Friday are three separate plan
+// entries (three separate IDs) but the same real exercise, so their
+// history needs to be pooled for progression/PRs to actually work right.
+function exerciseIdsForName(name, plan) {
+  const target = normalizedExerciseName(name);
+  const ids = [];
+  Object.values(plan.days).forEach(dayList => {
+    (dayList || []).forEach(e => { if (normalizedExerciseName(e.name) === target) ids.push(e.id); });
+  });
+  return ids;
 }
 
-function bestOneRmEver(exId, logs) {
-  const entries = logsForExercise(exId, logs);
+function logsForExerciseName(name, logs, plan) {
+  const idSet = new Set(exerciseIdsForName(name, plan));
+  return logs
+    .flatMap(l => (l.exercises || [])
+      .filter(e => idSet.has(e.exerciseId))
+      .map(e => ({ date: l.date, ...e })))
+    .sort((a, b) => new Date(a.date) - new Date(b.date));
+}
+
+function bestOneRmEverByName(name, logs, plan) {
+  const entries = logsForExerciseName(name, logs, plan);
   let best = { oneRm: 0, date: null };
   entries.forEach(e => {
     const top = Progression.topSetOf(e);
@@ -1595,6 +1614,16 @@ function renderPlanTab() {
       </div>
       <p class="helper-text">Checks your whole week for volume outside typical ranges, back-to-back scheduling conflicts, missing muscle groups, rep-range variety, and repeated exercises.</p>
       <div id="planReviewResults"></div>
+      <div class="row" style="margin-top:12px;">
+        <select id="presetQuestionSelect">
+          <option value="">Or ask a specific question…</option>
+          <option value="recovery">How does my recovery time look?</option>
+          <option value="split">How does my split look?</option>
+          <option value="alignment">Are all my exercises aligned?</option>
+        </select>
+        <button class="btn btn-sm" id="askPresetBtn" style="flex:0 0 auto;">Ask</button>
+      </div>
+      <div id="presetQuestionResult"></div>
     </div>
     <div class="day-tabs" id="planDayTabs"></div>
     <div class="card">
@@ -1609,6 +1638,7 @@ function renderPlanTab() {
   `;
   $('#openBuilderBtn').onclick = () => renderPlanBuilderForm();
   $('#reviewPlanBtn').onclick = () => runPlanReview(plan);
+  $('#askPresetBtn').onclick = () => askPresetQuestion(plan);
   if (reviewState.findings) renderReviewResults(false);
 
   const dayTabs = $('#planDayTabs');
@@ -1783,6 +1813,32 @@ function renderBuilderPreview(container, generatedPlan, unit) {
 }
 
 let reviewState = { findings: null, summary: '', suggestions: [] };
+
+async function askPresetQuestion(plan) {
+  const select = $('#presetQuestionSelect');
+  const question = select.value;
+  const resultEl = $('#presetQuestionResult');
+  if (!question) { toast('Pick a question first.'); return; }
+
+  if (question === 'alignment') {
+    const findings = PlanReview.checkAlignment(plan);
+    resultEl.innerHTML = findings.length
+      ? `<div class="ai-tip"><span class="tag">Exercise alignment</span><ul style="margin:6px 0 0;padding-left:18px;">${findings.map(f => `<li style="margin-bottom:4px;">${escapeHtml(f)}</li>`).join('')}</ul></div>`
+      : `<div class="ai-tip"><span class="tag">Exercise alignment</span>Everything lines up — no naming or muscle-group mismatches found across repeated exercises.</div>`;
+    return;
+  }
+
+  const askBtn = $('#askPresetBtn');
+  askBtn.disabled = true; askBtn.textContent = 'Asking…';
+  resultEl.innerHTML = `<p class="helper-text">Thinking…</p>`;
+  const findings = PlanReview.analyze(plan);
+  const summary = PlanReview.toPromptSummary(plan, findings);
+  const res = await AI.answerPresetQuestion(question, summary);
+  askBtn.disabled = false; askBtn.textContent = 'Ask';
+  resultEl.innerHTML = res.ok
+    ? `<div class="ai-tip"><span class="tag">${select.options[select.selectedIndex].text}</span>${escapeHtml(res.text)}</div>`
+    : `<p class="helper-text">${escapeHtml(res.message)}</p>`;
+}
 
 function runPlanReview(plan) {
   reviewState.findings = PlanReview.analyze(plan);
@@ -1976,6 +2032,7 @@ function renderTodayTab() {
   const upcomingType = Progression.weekType(cycle, wk);
   const logs = Storage.getLogs();
   const settings = Storage.getSettings();
+  const plan = Storage.getPlan();
   const panel = $('#panel-today');
   const { name: activeName } = Profiles.getActive();
 
@@ -2060,7 +2117,7 @@ function renderTodayTab() {
   });
 
   exercises.forEach(ex => {
-    const exLogs = logsForExercise(ex.id, logs);
+    const exLogs = logsForExerciseName(ex.name, logs, plan);
     const rx = Progression.nextPrescription(ex, exLogs, upcomingType);
     const plateauMsg = Progression.detectPlateau(exLogs);
     const lastEntry = exLogs[exLogs.length - 1];
@@ -2159,11 +2216,12 @@ function renderTodayTab() {
 // Shared by the normal Today-tab save button and Live Workout Mode's finish
 // button — getSetsForExercise(exerciseId) returns that exercise's logged sets.
 function finalizeSession(templateDay, exercises, logs, getSetsForExercise, chirp) {
+  const plan = Storage.getPlan();
   const entry = { date: isoDate(), day: templateDay, exercises: [] };
   let prCount = 0;
   exercises.forEach(ex => {
     const sets = getSetsForExercise(ex.id) || [];
-    const priorBest = bestOneRmEver(ex.id, logs).oneRm;
+    const priorBest = bestOneRmEverByName(ex.name, logs, plan).oneRm;
     const newTop = Progression.topSetOf({ sets });
     if (newTop.oneRm > priorBest && priorBest > 0) prCount++;
     entry.exercises.push({ exerciseId: ex.id, name: ex.name, muscle: ex.muscle, sets });
@@ -2298,8 +2356,9 @@ function saveWorkoutModeCurrentSets(exId) {
 function renderWorkoutModeScreen(upcomingType, logs, settings) {
   const overlay = $('#workoutModeOverlay');
   if (!overlay) return;
+  const plan = Storage.getPlan();
   const ex = workoutMode.exercises[workoutMode.idx];
-  const exLogs = logsForExercise(ex.id, logs);
+  const exLogs = logsForExerciseName(ex.name, logs, plan);
   const rx = Progression.nextPrescription(ex, exLogs, upcomingType);
   const restSecs = Progression.suggestedRestSeconds(ex.repLow, ex.type);
   const isLast = workoutMode.idx === workoutMode.exercises.length - 1;
@@ -2522,9 +2581,10 @@ function countAllTimePRs(logs) {
   sorted.forEach(l => {
     (l.exercises || []).forEach(e => {
       const top = Progression.topSetOf(e);
-      const prior = bestByExercise[e.exerciseId] || 0;
+      const key = normalizedExerciseName(e.name);
+      const prior = bestByExercise[key] || 0;
       if (prior > 0 && top.oneRm > prior) prCount++;
-      if (top.oneRm > prior) bestByExercise[e.exerciseId] = top.oneRm;
+      if (top.oneRm > prior) bestByExercise[key] = top.oneRm;
     });
   });
   return prCount;
@@ -2624,14 +2684,14 @@ function renderProgressTab() {
   });
 
   const chosen = exercises.find(e => e.id === state.progressExerciseId);
-  const entries = logsForExercise(chosen.id, logs);
+  const entries = logsForExerciseName(chosen.name, logs, plan);
   const points = entries.map(e => {
     const top = Progression.topSetOf(e);
     return { x: e.date.slice(5), y: top.oneRm };
   });
   $('#progressChart').innerHTML = `<h3 style="margin-bottom:8px;">${chosen.name} — estimated 1RM trend</h3>` + Charts.line(points, { unitLabel: chosen.unit });
 
-  const best = bestOneRmEver(chosen.id, logs);
+  const best = bestOneRmEverByName(chosen.name, logs, plan);
   $('#progressPR').textContent = best.oneRm > 0
     ? `Best estimated 1RM: ${best.oneRm}${chosen.unit} (set on ${best.date})`
     : 'Log a session with this exercise to start tracking.';

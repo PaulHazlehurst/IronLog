@@ -123,5 +123,63 @@ const PlanReview = {
     });
     const flagLines = Object.values(findings).flat();
     return `Weekly plan:\n${lines.join('\n')}\n\nAutomatically detected flags:\n${flagLines.length ? flagLines.join('\n') : 'None.'}`;
+  },
+
+  // "Are all my exercises aligned?" — catches two real, related problems:
+  // (1) the exact same exercise name tagged with different muscle/type
+  //     across days (a data mistake), and (2) near-identical names that
+  //     differ only by a typo, which matters a lot now that progression
+  //     and PRs are pooled by exact name match — a misspelled duplicate
+  //     silently starts its own separate, empty history track.
+  checkAlignment(plan) {
+    const all = [];
+    Object.entries(plan.days).forEach(([day, list]) => (list || []).forEach(ex => all.push({ ...ex, day })));
+    const findings = [];
+    if (all.length < 2) return findings;
+
+    const groups = {};
+    all.forEach(ex => {
+      const key = ex.name.trim().toLowerCase();
+      groups[key] = groups[key] || [];
+      groups[key].push(ex);
+    });
+
+    Object.values(groups).forEach(group => {
+      if (group.length < 2) return;
+      const muscles = new Set(group.map(e => e.muscle));
+      const types = new Set(group.map(e => e.type));
+      const days = group.map(e => e.day).join(', ');
+      if (muscles.size > 1) {
+        findings.push(`"${group[0].name}" is tagged as different muscle groups on different days (${[...muscles].join(' vs ')}) — ${days}. Pick one so progress tracks correctly.`);
+      }
+      if (types.size > 1) {
+        findings.push(`"${group[0].name}" is marked both compound and isolation depending on the day (${days}) — worth making it consistent.`);
+      }
+    });
+
+    const keys = Object.keys(groups);
+    for (let i = 0; i < keys.length; i++) {
+      for (let j = i + 1; j < keys.length; j++) {
+        const dist = levenshteinDistance(keys[i], keys[j]);
+        const maxLen = Math.max(keys[i].length, keys[j].length);
+        if (dist > 0 && dist <= 2 && maxLen > 4) {
+          findings.push(`"${groups[keys[i]][0].name}" and "${groups[keys[j]][0].name}" look like they might be the same exercise with a spelling difference — right now they're tracked as two completely separate exercises with separate progress histories.`);
+        }
+      }
+    }
+
+    return findings;
   }
 };
+
+function levenshteinDistance(a, b) {
+  const dp = Array.from({ length: a.length + 1 }, () => new Array(b.length + 1).fill(0));
+  for (let i = 0; i <= a.length; i++) dp[i][0] = i;
+  for (let j = 0; j <= b.length; j++) dp[0][j] = j;
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      dp[i][j] = a[i - 1] === b[j - 1] ? dp[i - 1][j - 1] : 1 + Math.min(dp[i - 1][j - 1], dp[i - 1][j], dp[i][j - 1]);
+    }
+  }
+  return dp[a.length][b.length];
+}

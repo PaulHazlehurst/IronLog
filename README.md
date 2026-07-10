@@ -175,6 +175,47 @@ style, Taylor becomes Dark mode + Taylor style, Pink/Neon/Sunset/Forest/
 Holiday/Winter all become Dark mode + that style) so nothing resets or
 looks different unless you change it yourself.
 
+## Critical fix: multi-day exercises weren't sharing progress history
+
+Confirmed exactly what you suspected, and traced it precisely: every
+exercise slot gets its own ID when you add it to a day. "Chest Press" on
+Monday, Wednesday, and Friday were three separate IDs, and progression was
+matched by ID alone — so each day's Chest Press only ever looked at
+*previous occurrences of that exact same slot*, completely blind to the
+other two sessions that same week. This also quietly miscounted PRs the
+same way (a session could get flagged as a "PR" against its own
+practically-empty one-day-a-week history).
+
+Fixed at the root: progression, PR detection, the Progress tab chart, and
+the Trophy Case PR count all now pool history by **exercise name** across
+the whole plan, not by per-day ID. Chest Press on any day now correctly
+sees every Chest Press session that week, and progression advances every
+time you train it — not once a week regardless of frequency. The Progress
+tab's exercise picker also now shows one "Chest Press" entry instead of
+three identical, confusing duplicates.
+
+**One thing this makes matter more:** exercise names now need to match
+*exactly* (case/whitespace aside) to pool correctly — "Chest Press" and
+"Chest press " with a typo would no longer be silently merged. That's
+exactly what the new alignment check below is for.
+
+## Plan review: ask a specific question
+
+Small select box under "Review my week" with three preset questions:
+
+- **How does my recovery time look?** — AI-narrated, focused specifically
+  on recovery windows between sessions hitting the same muscle.
+- **How does my split look?** — AI-narrated take on the overall structure
+  (push/pull/legs, upper/lower, etc.) and whether the balance across days
+  makes sense.
+- **Are all my exercises aligned?** — no AI needed, purely deterministic.
+  Checks two things directly tied to the fix above: (1) the same exercise
+  name tagged with different muscle groups or types across days — a data
+  mistake — and (2) exercise names that are *almost* identical but not
+  quite (a likely typo), which matters now since a misspelled duplicate
+  silently starts its own separate, empty progress history instead of
+  pooling with the real one.
+
 ## Roulette — found and fixed a real display bug, plus your new spec
 
 The actual bug: the "🎟️ N spins available" text never updated after a
