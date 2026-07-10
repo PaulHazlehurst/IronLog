@@ -175,6 +175,18 @@ style, Taylor becomes Dark mode + Taylor style, Pink/Neon/Sunset/Forest/
 Holiday/Winter all become Dark mode + that style) so nothing resets or
 looks different unless you change it yourself.
 
+## Fixed: preset question answer disappearing on every sync
+
+Same underlying issue as a couple of earlier fixes, just a spot I missed
+when I built the preset-question feature — I gave "Review my week"
+results a way to survive a re-render but forgot to do the same for the
+new question box, so any background sync (or just navigating away and
+back) wiped the answer with nothing to bring it back. Fixed two ways:
+the answer now persists and restores itself after any re-render, *and*
+a populated result is now treated the same as an open form — a silent
+background sync won't even attempt the disruptive re-render while one's
+showing, so there's no flash either.
+
 ## Critical fix: multi-day exercises weren't sharing progress history
 
 Confirmed exactly what you suspected, and traced it precisely: every

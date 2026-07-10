@@ -1640,6 +1640,7 @@ function renderPlanTab() {
   $('#reviewPlanBtn').onclick = () => runPlanReview(plan);
   $('#askPresetBtn').onclick = () => askPresetQuestion(plan);
   if (reviewState.findings) renderReviewResults(false);
+  renderPresetQuestionResult();
 
   const dayTabs = $('#planDayTabs');
   DAYS.forEach(d => {
@@ -1813,18 +1814,29 @@ function renderBuilderPreview(container, generatedPlan, unit) {
 }
 
 let reviewState = { findings: null, summary: '', suggestions: [] };
+let presetQuestionState = { question: '', resultHTML: '' };
+
+function renderPresetQuestionResult() {
+  const resultEl = $('#presetQuestionResult');
+  const select = $('#presetQuestionSelect');
+  if (!resultEl) return;
+  resultEl.innerHTML = presetQuestionState.resultHTML || '';
+  if (select && presetQuestionState.question) select.value = presetQuestionState.question;
+}
 
 async function askPresetQuestion(plan) {
   const select = $('#presetQuestionSelect');
   const question = select.value;
   const resultEl = $('#presetQuestionResult');
   if (!question) { toast('Pick a question first.'); return; }
+  presetQuestionState.question = question;
 
   if (question === 'alignment') {
     const findings = PlanReview.checkAlignment(plan);
-    resultEl.innerHTML = findings.length
+    presetQuestionState.resultHTML = findings.length
       ? `<div class="ai-tip"><span class="tag">Exercise alignment</span><ul style="margin:6px 0 0;padding-left:18px;">${findings.map(f => `<li style="margin-bottom:4px;">${escapeHtml(f)}</li>`).join('')}</ul></div>`
       : `<div class="ai-tip"><span class="tag">Exercise alignment</span>Everything lines up — no naming or muscle-group mismatches found across repeated exercises.</div>`;
+    resultEl.innerHTML = presetQuestionState.resultHTML;
     return;
   }
 
@@ -1835,9 +1847,10 @@ async function askPresetQuestion(plan) {
   const summary = PlanReview.toPromptSummary(plan, findings);
   const res = await AI.answerPresetQuestion(question, summary);
   askBtn.disabled = false; askBtn.textContent = 'Ask';
-  resultEl.innerHTML = res.ok
+  presetQuestionState.resultHTML = res.ok
     ? `<div class="ai-tip"><span class="tag">${select.options[select.selectedIndex].text}</span>${escapeHtml(res.text)}</div>`
     : `<p class="helper-text">${escapeHtml(res.message)}</p>`;
+  resultEl.innerHTML = presetQuestionState.resultHTML;
 }
 
 function runPlanReview(plan) {
@@ -2264,7 +2277,7 @@ function releaseWakeLock() {
 }
 let lastAutoSyncCheck = 0;
 function hasOpenTransientForm() {
-  return ['addShopItemForm', 'planBuilderForm', 'addExerciseForm', 'addBookForm', 'studyRecallArea'].some(id => {
+  return ['addShopItemForm', 'planBuilderForm', 'addExerciseForm', 'addBookForm', 'studyRecallArea', 'planReviewResults', 'presetQuestionResult'].some(id => {
     const el = document.getElementById(id);
     return el && el.innerHTML.trim() !== '';
   });
