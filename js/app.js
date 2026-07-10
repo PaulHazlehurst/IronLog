@@ -459,7 +459,7 @@ function renderPhotoGalleryHTML(posts) {
     </div>`;
 }
 
-const ROULETTE_SEGMENTS = [0, 0.5, 0, 1, 0, 1.5, 0, 2, 0, 5];
+const ROULETTE_SEGMENTS = ['respin', 0.5, 'respin', 1, 'respin', 1.5, 'respin', 2, 'respin', 5];
 
 function buildWheelSVG() {
   const n = ROULETTE_SEGMENTS.length;
@@ -479,8 +479,9 @@ function buildWheelSVG() {
     const color = colors[i % 2];
     paths += `<path d="M${cx},${cy} L${x1.toFixed(2)},${y1.toFixed(2)} A${r},${r} 0 0,1 ${x2.toFixed(2)},${y2.toFixed(2)} Z" fill="${color}" stroke="var(--bg)" stroke-width="1.5"/>`;
     const [lx, ly] = toXY((a1 + a2) / 2, r * 0.66);
-    const label = mult >= 5 ? '5x' : `${mult}x`;
-    labels += `<text x="${lx.toFixed(2)}" y="${ly.toFixed(2)}" font-size="${mult >= 5 ? 15 : 13}" font-family="var(--font-mono)" fill="${mult >= 5 ? 'var(--gold)' : 'var(--text)'}" text-anchor="middle" dominant-baseline="middle" font-weight="700">${label}</text>`;
+    const isJackpot = mult === 5;
+    const label = mult === 'respin' ? '↻' : (isJackpot ? '5x' : `${mult}x`);
+    labels += `<text x="${lx.toFixed(2)}" y="${ly.toFixed(2)}" font-size="${isJackpot ? 15 : 13}" font-family="var(--font-mono)" fill="${isJackpot ? 'var(--gold)' : 'var(--text)'}" text-anchor="middle" dominant-baseline="middle" font-weight="700">${label}</text>`;
   });
   return `<svg viewBox="0 0 200 200" class="roulette-wheel" id="rouletteWheel">${paths}${labels}</svg>`;
 }
@@ -488,30 +489,37 @@ function buildWheelSVG() {
 function renderShopTab() {
   const panel = $('#panel-shop');
   const { name: activeName } = Profiles.getActive();
+  Storage.grantDailySpinIfNeeded();
   const tokens = Storage.getTokens();
+  const spins = Storage.getSpinTokens();
   const settings = Storage.getSettings();
+  const otherNames = Object.keys(getAllProfilesRaw()).filter(n => n !== activeName);
 
   panel.innerHTML = `
     <div class="card" style="text-align:center;">
       <span class="coin-badge" style="width:44px;height:44px;"></span>
       <div class="token-teaser-num" style="font-size:32px;margin-top:6px;">${tokens}</div>
       <div class="helper-text">+${settings.tokensPerWorkout} per workout, +${settings.tokensPerPR} per PR</div>
+      ${otherNames.length > 0 ? `<button class="btn btn-sm" id="openSendTokensBtn" style="margin-top:8px;">💸 Send tokens</button>` : ''}
+      <div id="sendTokensForm"></div>
     </div>
     <div class="card" style="text-align:center;">
       <h3>🎰 Token Roulette</h3>
-      <p class="helper-text">Spin for a chance to multiply your tokens — or lose the wager. Just for fun, nothing but tokens on the line.</p>
+      <p class="helper-text">Land on ↻ and it's a free respin — no coins won or lost. One spin a day, free; earn more by hitting a PR.</p>
+      <div class="helper-text" style="margin-top:2px;">🎟️ ${spins} spin${spins === 1 ? '' : 's'} available</div>
       <div class="roulette-wrap">
         <div class="roulette-pointer">▼</div>
         ${buildWheelSVG()}
         <div class="roulette-hub"></div>
       </div>
       <div class="roulette-legend">
-        <span>0x ×5</span><span>0.5x</span><span>1x</span><span>1.5x</span><span>2x</span><span>5x JACKPOT</span>
+        <span>↻ Respin ×5</span><span>0.5x</span><span>1x</span><span>1.5x</span><span>2x</span><span>5x JACKPOT</span>
       </div>
       <div class="row" style="justify-content:center;margin-top:14px;max-width:260px;margin-left:auto;margin-right:auto;">
-        <input id="wagerInput" type="number" min="1" max="${Math.max(1, tokens)}" value="${Math.min(10, Math.max(1, tokens))}" ${tokens < 1 ? 'disabled' : ''}>
-        <button class="btn btn-primary btn-sm" id="spinBtn" ${tokens < 1 ? 'disabled' : ''}>Spin</button>
+        <input id="wagerInput" type="number" min="1" max="${Math.max(1, tokens)}" value="${Math.min(10, Math.max(1, tokens))}" ${tokens < 1 || spins < 1 ? 'disabled' : ''}>
+        <button class="btn btn-primary btn-sm" id="spinBtn" ${tokens < 1 || spins < 1 ? 'disabled' : ''}>Spin</button>
       </div>
+      ${spins < 1 ? `<p class="helper-text">Out of spins for today — come back tomorrow, or earn one by hitting a PR.</p>` : ''}
       <div id="rouletteResult" class="helper-text" style="margin-top:8px;min-height:16px;"></div>
     </div>
     <div class="card">
@@ -522,6 +530,31 @@ function renderShopTab() {
 
   $('#spinBtn').onclick = () => spinRoulette();
   renderShopSection($('#shopSection'), activeName);
+
+  const openSendBtn = $('#openSendTokensBtn');
+  if (openSendBtn) openSendBtn.onclick = () => {
+    const formEl = $('#sendTokensForm');
+    if (formEl.innerHTML) { formEl.innerHTML = ''; return; }
+    formEl.innerHTML = `
+      <div class="row" style="margin-top:10px;">
+        <select id="sendTokensTarget">${otherNames.map(n => `<option>${escapeHtml(n)}</option>`).join('')}</select>
+        <input id="sendTokensAmount" type="number" min="1" max="${tokens}" placeholder="Amount">
+      </div>
+      <button class="btn btn-sm btn-primary" id="confirmSendTokensBtn" style="margin-top:8px;">Send</button>
+    `;
+    $('#confirmSendTokensBtn').onclick = async () => {
+      const target = $('#sendTokensTarget').value;
+      const amount = Math.floor(Number($('#sendTokensAmount').value));
+      if (!amount || amount < 1) { toast('Enter an amount first.'); return; }
+      if (amount > Storage.getTokens()) { toast("You don't have that many tokens."); return; }
+      if (!confirm(`Send ${amount} tokens to ${target}?`)) return;
+      const btn = $('#confirmSendTokensBtn');
+      btn.disabled = true; btn.textContent = 'Sending…';
+      const res = await Profiles.sendTokensTo(target, amount);
+      toast(res.ok ? `Sent ${amount} tokens to ${target}! 🪙` : res.message);
+      renderShopTab();
+    };
+  };
 }
 
 function spinRoulette() {
@@ -529,9 +562,11 @@ function spinRoulette() {
   const spinBtn = $('#spinBtn');
   const wager = Math.floor(Number(wagerInput.value));
   const balance = Storage.getTokens();
+  if (Storage.getSpinTokens() < 1) { toast('No spins left today.'); return; }
   if (!wager || wager < 1) { toast('Enter a wager first.'); return; }
   if (wager > balance) { toast("You don't have that many tokens."); return; }
 
+  Storage.useSpinToken();
   spinBtn.disabled = true;
   wagerInput.disabled = true;
   $('#rouletteResult').textContent = '';
@@ -551,39 +586,46 @@ function spinRoulette() {
   wheel.style.transform = `rotate(${rotation}deg)`;
 
   setTimeout(() => {
-    const winnings = Math.round(wager * multiplier);
-    const net = winnings - wager;
-    Storage.addTokens(net, multiplier === 0 ? 'Roulette: lost wager' : `Roulette: ${multiplier}x (${net >= 0 ? '+' : ''}${net})`);
     const resultEl = $('#rouletteResult');
     if (!resultEl) return; // tab may have changed
-    if (multiplier >= 5) {
-      resultEl.innerHTML = `<span style="color:var(--gold);font-weight:600;">🎉 JACKPOT! 5x — won ${winnings} tokens!</span>`;
-      fireConfetti();
-      const settings = Storage.getSettings();
-      const { name: activeName } = Profiles.getActive();
-      Storage.addPost({ type: 'comment', authorProfile: activeName, authorColor: settings.tagColor, text: `hit the roulette JACKPOT and won ${winnings} tokens! 🎰🎉` });
-    } else if (multiplier > 1) {
-      resultEl.innerHTML = `<span style="color:var(--success);">Nice — ${multiplier}x, +${net} tokens.</span>`;
-    } else if (multiplier === 1) {
-      resultEl.innerHTML = `<span>Push — wager returned.</span>`;
-    } else if (multiplier > 0) {
-      resultEl.innerHTML = `<span style="color:var(--amber);">${multiplier}x — lost ${Math.abs(net)} tokens.</span>`;
+
+    if (multiplier === 'respin') {
+      Storage.addBonusSpin('Respin refund');
+      resultEl.innerHTML = `<span style="color:var(--blue);">🔁 Respin! No tokens or coins lost — spin again whenever you're ready.</span>`;
     } else {
-      resultEl.innerHTML = `<span style="color:var(--accent);">Bust — lost your ${wager}-token wager.</span>`;
+      const winnings = Math.round(wager * multiplier);
+      const net = winnings - wager;
+      Storage.addTokens(net, `Roulette: ${multiplier}x (${net >= 0 ? '+' : ''}${net})`);
+      if (multiplier >= 5) {
+        resultEl.innerHTML = `<span style="color:var(--gold);font-weight:600;">🎉 JACKPOT! 5x — won ${winnings} tokens!</span>`;
+        fireConfetti();
+        const settings = Storage.getSettings();
+        const { name: activeName } = Profiles.getActive();
+        Storage.addPost({ type: 'comment', authorProfile: activeName, authorColor: settings.tagColor, text: `hit the roulette JACKPOT and won ${winnings} tokens! 🎰🎉` });
+      } else if (multiplier > 1) {
+        resultEl.innerHTML = `<span style="color:var(--success);">Nice — ${multiplier}x, +${net} tokens.</span>`;
+      } else if (multiplier === 1) {
+        resultEl.innerHTML = `<span>Push — wager returned.</span>`;
+      } else {
+        resultEl.innerHTML = `<span style="color:var(--amber);">${multiplier}x — lost ${Math.abs(net)} tokens.</span>`;
+      }
     }
-    // Update balance/inputs in place so the result message above stays visible.
+
+    // Update balance/spin count/inputs in place so the result message above stays visible.
     const newBalance = Storage.getTokens();
+    const newSpins = Storage.getSpinTokens();
     const balanceNumEl = $('.token-teaser-num', panelShopEl());
     if (balanceNumEl) balanceNumEl.textContent = newBalance;
     wagerInput.max = Math.max(1, newBalance);
     wagerInput.value = Math.min(Number(wagerInput.value) || 10, Math.max(1, newBalance));
-    wagerInput.disabled = newBalance < 1;
-    spinBtn.disabled = newBalance < 1;
+    wagerInput.disabled = newBalance < 1 || newSpins < 1;
+    spinBtn.disabled = newBalance < 1 || newSpins < 1;
     pushImmediate();
   }, 3600);
 }
 
 function panelShopEl() { return $('#panel-shop'); }
+
 
 const SHOP_CATEGORIES = {
   tried: 'Have you ever tried this one?',
@@ -1049,6 +1091,48 @@ function openPhotoViewer(dataUrl) {
   document.body.appendChild(overlay);
 }
 
+const GARDEN_STAGES = [
+  { threshold: 0, emoji: '🌱', label: 'Just planted' },
+  { threshold: 20, emoji: '🌿', label: 'Sprouting' },
+  { threshold: 50, emoji: '🪴', label: 'Growing' },
+  { threshold: 100, emoji: '🌳', label: 'Thriving' },
+  { threshold: 180, emoji: '🌸', label: 'Blooming' },
+  { threshold: 300, emoji: '🌺', label: 'Full bloom' }
+];
+
+function computeGardenStage() {
+  const profiles = getAllProfilesRaw();
+  let totalSessions = 0;
+  Object.values(profiles).forEach(p => { totalSessions += (p.logs || []).length; });
+  const posts = Storage.getPosts();
+  const totalGifts = posts.filter(p => p.type === 'gift').length;
+  const keepsakes = Storage.getKeepsakes().length;
+  const jointStreak = Storage.jointStreakWeeks();
+
+  const score = totalSessions * 2 + posts.length + totalGifts * 3 + keepsakes * 4 + jointStreak * 10;
+
+  let stageIdx = 0;
+  for (let i = 0; i < GARDEN_STAGES.length; i++) if (score >= GARDEN_STAGES[i].threshold) stageIdx = i;
+  const stage = GARDEN_STAGES[stageIdx];
+  const next = GARDEN_STAGES[stageIdx + 1];
+  const progress = next ? Math.round(((score - stage.threshold) / (next.threshold - stage.threshold)) * 100) : 100;
+  return { score, stage, next, progress };
+}
+
+function renderGardenCardHTML() {
+  const { stage, next, progress } = computeGardenStage();
+  return `
+    <div class="card garden-card">
+      <div class="garden-emoji">${stage.emoji}</div>
+      <div class="garden-label">${stage.label}</div>
+      ${next
+        ? `<div class="muscle-bar-track garden-progress"><div class="muscle-bar-fill" style="width:${progress}%;background:var(--success);"></div></div>
+           <div class="helper-text">Growing toward ${next.emoji} ${next.label}</div>`
+        : `<div class="helper-text">Fully bloomed 🎉 — still growing every time you show up for each other.</div>`}
+      <p class="helper-text" style="margin-top:6px;">Grows from workouts, posts, gifts, and reasons why — from both of you.</p>
+    </div>`;
+}
+
 function greetingFor(name) {
   const h = new Date().getHours();
   if (h < 5) return `Still up, ${name}? 🌙`;
@@ -1089,6 +1173,7 @@ function renderHomeTab() {
       ${renderCompetitionChipsHTML(activeName)}
     </div>
     <div id="specialDateEditArea"></div>
+    ${renderGardenCardHTML()}
 
     <div class="ig-qa-row">
       ${QUICK_ACTIONS.map(qa => `
@@ -2085,6 +2170,7 @@ function finalizeSession(templateDay, exercises, logs, getSetsForExercise, chirp
 
   const tokensEarned = (settings.tokensPerWorkout || 10) + prCount * (settings.tokensPerPR || 15);
   Storage.addTokens(tokensEarned, `Completed ${templateDay}'s workout${prCount > 0 ? ` + ${prCount} PR${prCount > 1 ? 's' : ''}` : ''}`);
+  for (let i = 0; i < prCount; i++) Storage.addBonusSpin('New PR');
 
   const prLine = prCount > 0 ? ` (${prCount} new PR${prCount > 1 ? 's' : ''} 🎉)` : '';
   const chirpLine = chirp && chirp.trim() ? ` — "${chirp.trim()}"` : '';
@@ -2122,6 +2208,16 @@ function hasOpenTransientForm() {
   });
 }
 
+// True whenever the Today tab (or Workout Mode) currently has an editable
+// set-logging UI on screen — including "Log another session today" after
+// finishing. A silent background sync must never blow this away mid-entry,
+// which is exactly what was happening every ~12 seconds before this guard.
+function isLoggingWorkout() {
+  return !!document.querySelector('#todayExercises .set-row:not(.set-header)') ||
+    !!document.querySelector('#wmSetsLog .set-row:not(.set-header)') ||
+    todayForceShowForm;
+}
+
 async function syncNow(silent) {
   const s = Storage.getSettings();
   if (!s.githubToken) return;
@@ -2143,7 +2239,7 @@ async function syncNow(silent) {
       const activeEl = document.activeElement;
       const isTyping = activeEl && ['INPUT', 'TEXTAREA', 'SELECT'].includes(activeEl.tagName);
       const hasRunningTimer = !!document.querySelector('#restCountdown');
-      if (!silent || !(isTyping || hasRunningTimer || hasOpenTransientForm())) renderActiveTab();
+      if (!silent || !(isTyping || hasRunningTimer || hasOpenTransientForm() || isLoggingWorkout())) renderActiveTab();
     }
   }
 }

@@ -175,6 +175,58 @@ style, Taylor becomes Dark mode + Taylor style, Pink/Neon/Sunset/Forest/
 Holiday/Winter all become Dark mode + that style) so nothing resets or
 looks different unless you change it yourself.
 
+## Critical fix: the date bug behind three separate symptoms
+
+Traced all three of these back to the same root cause: the app was
+computing "today" using UTC time instead of your actual local time, so
+"today" was silently rolling over at UTC midnight rather than your real
+midnight — meaning depending on the hour and your timezone, "today" could
+be wrong for several hours at a stretch. This explains:
+
+- Getting locked out of "today's" workout even though it was genuinely a
+  new calendar day for you.
+- Being able to redeem water more than once in the same real day.
+- (Indirectly) contributing to the sync-interruption bug below, since the
+  wrong "today" made the completed-workout check unreliable.
+
+Fixed at the source — one function (`isoDate`), used everywhere "today" is
+computed, now uses your local calendar date. Everything downstream
+(workout lockout, water limit, streaks) inherits the fix automatically.
+
+## Fixed: logging a second workout kept snapping back to the completed screen
+
+Real bug, and your diagnosis was right — background sync (every ~12s) was
+re-rendering the Today tab mid-entry, and since it had no way to know you
+were actively in the middle of "log another session," it just redrew the
+completed-workout screen over whatever you were filling out. Extended the
+same protection already built for open forms/timers to cover this exact
+case — an in-progress workout log (either the first session or a
+follow-up) is now treated as protected, same as everything else.
+
+## Roulette: 0 is now a respin, plus daily spin limits
+
+Landing on the old "0" segment no longer costs your wager — it's now a
+free respin (shown as ↻ on the wheel), no coins won or lost either way.
+Spinning itself is now gated to **one free spin a day**, refreshed at your
+local midnight, with **+1 bonus spin every time you hit a PR** — check the
+spin count shown above the wheel.
+
+## Send tokens to your partner
+
+Shop tab → 💸 Send tokens, next to your balance. Pick who, how much,
+confirm — deducts from your balance and credits theirs directly (not a
+redemption request this time, an actual transfer), posts a note to Home
+so you both see it.
+
+## Our Garden — a shared growth visual (the "wow" for both of you)
+
+New card at the top of Home: a little plant that grows through six stages
+(🌱 → 🌿 → 🪴 → 🌳 → 🌸 → 🌺) based on your *combined* activity across the
+whole app — both profiles' workouts, every post, every gift sent, every
+Reasons Why entry, and your joint streak all feed into it. It's the one
+thing on Home that's neither person's individual stat — it only grows when
+you're both actually using this together.
+
 ## Ghost-text set inputs + rep range in Workout Mode
 
 Weight/reps/RPE fields now show the suggested numbers as grey placeholder

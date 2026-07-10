@@ -111,6 +111,8 @@ function defaultProfile() {
     tokens: 0,
     tokenLog: [],
     shop: [],
+    spinTokens: 1,
+    lastFreeSpinGrantDate: null,
     wellness: {
       waterLog: {},      // { 'YYYY-MM-DD': true }
       library: [],       // [{id, title, author, totalPages, pagesRead, addedAt}]
@@ -253,6 +255,46 @@ const Profiles = {
     saveAllProfilesRaw(profiles);
     notifyChanged();
     return true;
+  },
+
+  // Deducts from the active profile's own balance (always safe) and, for
+  // the recipient, fetches their current file fresh (if synced) and pushes
+  // only that one file back — same safety pattern as pushPlanTo, never a
+  // blind local write to someone else's data.
+  async sendTokensTo(targetName, amount) {
+    const activeName = Profiles.activeName();
+    if (activeName === targetName) return { ok: false, message: "That's your own balance." };
+    amount = Math.floor(Number(amount)) || 0;
+    if (amount < 1) return { ok: false, message: 'Enter a valid amount.' };
+    if (amount > Storage.getTokens()) return { ok: false, message: "You don't have that many tokens." };
+
+    Profiles.updateActive(p => {
+      p.tokens = (p.tokens || 0) - amount;
+      p.tokenLog = [...(p.tokenLog || []), { id: uid(), amount: -amount, reason: `Sent to ${targetName}`, createdAt: new Date().toISOString() }].slice(-100);
+    });
+
+    const device = getDeviceRaw();
+    if (device.githubToken && device.githubGistId) {
+      const freshTarget = await Sync.fetchProfileFresh(targetName);
+      const profiles = getAllProfilesRaw();
+      const base = freshTarget || profiles[targetName];
+      if (!base) return { ok: false, message: 'Could not reach that profile — try again.' };
+      base.tokens = (base.tokens || 0) + amount;
+      base.tokenLog = [...(base.tokenLog || []), { id: uid(), amount, reason: `Received from ${activeName}`, createdAt: new Date().toISOString() }].slice(-100);
+      profiles[targetName] = base;
+      saveAllProfilesRaw(profiles);
+      await Sync.pushSingleProfile(targetName);
+    } else {
+      const profiles = getAllProfilesRaw();
+      if (!profiles[targetName]) return { ok: false, message: 'Profile not found.' };
+      profiles[targetName].tokens = (profiles[targetName].tokens || 0) + amount;
+      profiles[targetName].tokenLog = [...(profiles[targetName].tokenLog || []), { id: uid(), amount, reason: `Received from ${activeName}`, createdAt: new Date().toISOString() }].slice(-100);
+      saveAllProfilesRaw(profiles);
+    }
+    notifyChanged();
+    const settings = Storage.getSettings();
+    Storage.addPost({ type: 'comment', authorProfile: activeName, authorColor: settings.tagColor, text: `sent ${amount} tokens to ${targetName} 🪙` });
+    return { ok: true };
   },
 
   getActive() {
@@ -415,6 +457,31 @@ const Storage = {
     notifyChanged();
   },
   getTokenLog() { return (Profiles.getActive().data.tokenLog || []).slice().reverse(); },
+
+  /* ---------------- ROULETTE SPIN TOKENS ---------------- */
+  // Grants today's free spin if it hasn't been claimed yet — call this
+  // whenever the Shop/Roulette area is opened so it's always current.
+  grantDailySpinIfNeeded() {
+    const data = Profiles.getActive().data;
+    const today = isoDate();
+    if (data.lastFreeSpinGrantDate === today) return;
+    Profiles.updateActive(p => {
+      p.spinTokens = (p.spinTokens || 0) + 1;
+      p.lastFreeSpinGrantDate = today;
+    });
+    notifyChanged();
+  },
+  getSpinTokens() { return Profiles.getActive().data.spinTokens || 0; },
+  useSpinToken() {
+    if (Storage.getSpinTokens() < 1) return false;
+    Profiles.updateActive(p => { p.spinTokens = Math.max(0, (p.spinTokens || 0) - 1); });
+    notifyChanged();
+    return true;
+  },
+  addBonusSpin(reason) {
+    Profiles.updateActive(p => { p.spinTokens = (p.spinTokens || 0) + 1; });
+    notifyChanged();
+  },
 
   getShop(profileName) { return getAllProfilesRaw()[profileName]?.shop || []; },
   saveShop(items) { Profiles.updateActive(p => p.shop = items); notifyChanged(); },
@@ -619,7 +686,10 @@ function uid() {
 }
 
 function isoDate(d = new Date()) {
-  return d.toISOString().slice(0, 10);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 function mondayOf(dateStr) {
