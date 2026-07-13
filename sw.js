@@ -8,7 +8,7 @@
    time you want to force every device to drop old cached files.
    ============================================================ */
 
-const CACHE_VERSION = 'iron-log-v5';
+const CACHE_VERSION = 'iron-log-v6';
 const APP_SHELL = [
   './',
   './index.html',

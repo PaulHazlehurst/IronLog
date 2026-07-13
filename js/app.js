@@ -121,6 +121,7 @@ function renderProfilePanel() {
     b.onclick = () => {
       Profiles.setActive(n);
       applyTheme();
+      migrateExercisesToLibrary();
       $('#profilePanel').style.display = 'none';
       renderProfileButton();
       renderActiveTab();
@@ -264,7 +265,7 @@ function allPlanExercises() {
   const seen = new Map();
   Object.entries(plan.days).forEach(([day, list]) => {
     (list || []).forEach(ex => {
-      const key = normalizedExerciseName(ex.name);
+      const key = ex.exerciseDefId || normalizedExerciseName(ex.name);
       if (!seen.has(key)) seen.set(key, { ...ex, day });
     });
   });
@@ -273,9 +274,9 @@ function allPlanExercises() {
 
 function normalizedExerciseName(name) { return (name || '').trim().toLowerCase(); }
 
-// Every exercise slot across the whole plan that shares this name — e.g.
-// "Chest Press" on Monday, Wednesday, and Friday are three separate plan
-// entries (three separate IDs) but the same real exercise, so their
+// Every exercise slot across the whole plan that shares this identity —
+// e.g. "Chest Press" on Monday, Wednesday, and Friday are three separate
+// plan entries (three separate IDs) but the same real exercise, so their
 // history needs to be pooled for progression/PRs to actually work right.
 function exerciseIdsForName(name, plan) {
   const target = normalizedExerciseName(name);
@@ -286,8 +287,19 @@ function exerciseIdsForName(name, plan) {
   return ids;
 }
 
-function logsForExerciseName(name, logs, plan) {
-  const idSet = new Set(exerciseIdsForName(name, plan));
+// Prefers exerciseDefId (set by anything added through the exercise
+// library going forward) — a stable, unambiguous link that survives even
+// if the exercise's display name or plan slot ever changes. Falls back to
+// name-matching for older entries created before the library existed.
+function logsForExercise(ex, logs, plan) {
+  if (ex.exerciseDefId) {
+    const direct = logs
+      .flatMap(l => (l.exercises || [])
+        .filter(e => e.exerciseDefId === ex.exerciseDefId)
+        .map(e => ({ date: l.date, ...e })));
+    return direct.sort((a, b) => new Date(a.date) - new Date(b.date));
+  }
+  const idSet = new Set(exerciseIdsForName(ex.name, plan));
   return logs
     .flatMap(l => (l.exercises || [])
       .filter(e => idSet.has(e.exerciseId))
@@ -295,8 +307,8 @@ function logsForExerciseName(name, logs, plan) {
     .sort((a, b) => new Date(a.date) - new Date(b.date));
 }
 
-function bestOneRmEverByName(name, logs, plan) {
-  const entries = logsForExerciseName(name, logs, plan);
+function bestOneRmEver(ex, logs, plan) {
+  const entries = logsForExercise(ex, logs, plan);
   let best = { oneRm: 0, date: null };
   entries.forEach(e => {
     const top = Progression.topSetOf(e);
@@ -478,7 +490,7 @@ function renderPhotoGalleryHTML(posts) {
     </div>`;
 }
 
-const ROULETTE_SEGMENTS = ['respin', 0.5, 'respin', 1, 'respin', 1.5, 'respin', 2, 'respin', 5];
+const ROULETTE_SEGMENTS = [0, 0.5, 0, 1, 0, 1.5, 0, 2, 0, 5];
 
 function buildWheelSVG() {
   const n = ROULETTE_SEGMENTS.length;
@@ -499,7 +511,7 @@ function buildWheelSVG() {
     paths += `<path d="M${cx},${cy} L${x1.toFixed(2)},${y1.toFixed(2)} A${r},${r} 0 0,1 ${x2.toFixed(2)},${y2.toFixed(2)} Z" fill="${color}" stroke="var(--bg)" stroke-width="1.5"/>`;
     const [lx, ly] = toXY((a1 + a2) / 2, r * 0.66);
     const isJackpot = mult === 5;
-    const label = mult === 'respin' ? '↻' : (isJackpot ? '5x' : `${mult}x`);
+    const label = isJackpot ? '5x' : `${mult}x`;
     labels += `<text x="${lx.toFixed(2)}" y="${ly.toFixed(2)}" font-size="${isJackpot ? 15 : 13}" font-family="var(--font-mono)" fill="${isJackpot ? 'var(--gold)' : 'var(--text)'}" text-anchor="middle" dominant-baseline="middle" font-weight="700">${label}</text>`;
   });
   return `<svg viewBox="0 0 200 200" class="roulette-wheel" id="rouletteWheel">${paths}${labels}</svg>`;
@@ -524,7 +536,7 @@ function renderShopTab() {
     </div>
     <div class="card" style="text-align:center;">
       <h3>🎰 Token Roulette</h3>
-      <p class="helper-text">Land on ↻ and it's a free respin — nothing won, nothing lost, doesn't use up a spin. 2 free spins a day; earn more by hitting a PR.</p>
+      <p class="helper-text">2 free spins a day; earn more by hitting a PR.</p>
       <div class="helper-text" id="spinCountDisplay" style="margin-top:2px;">🎟️ ${spins} spin${spins === 1 ? '' : 's'} available</div>
       <div class="roulette-wrap">
         <div class="roulette-pointer">▼</div>
@@ -532,7 +544,7 @@ function renderShopTab() {
         <div class="roulette-hub"></div>
       </div>
       <div class="roulette-legend">
-        <span>↻ Respin ×5</span><span>0.5x</span><span>1x</span><span>1.5x</span><span>2x</span><span>5x JACKPOT</span>
+        <span>0x ×5</span><span>0.5x</span><span>1x</span><span>1.5x</span><span>2x</span><span>5x JACKPOT</span>
       </div>
       <div class="row" style="justify-content:center;margin-top:14px;max-width:260px;margin-left:auto;margin-right:auto;">
         <input id="wagerInput" type="number" min="1" max="${Math.max(1, tokens)}" value="${Math.min(10, Math.max(1, tokens))}" ${tokens < 1 || spins < 1 ? 'disabled' : ''}>
@@ -608,27 +620,24 @@ function spinRoulette() {
     const resultEl = $('#rouletteResult');
     if (!resultEl) return; // tab may have changed
 
-    if (multiplier === 'respin') {
-      Storage.addBonusSpin('Respin refund');
-      resultEl.innerHTML = `<span style="color:var(--blue);">🔁 Respin! No tokens or coins lost — spin again whenever you're ready.</span>`;
+    const winnings = Math.round(wager * multiplier);
+    const net = winnings - wager;
+    Storage.addTokens(net, `Roulette: ${multiplier}x (${net >= 0 ? '+' : ''}${net})`);
+    if (multiplier >= 5) {
+      resultEl.innerHTML = `<span style="color:var(--gold);font-weight:600;">🎉 JACKPOT! 5x — won ${winnings} tokens!</span>`;
+      fireConfetti();
+      playChime('jackpot');
+      const settings = Storage.getSettings();
+      const { name: activeName } = Profiles.getActive();
+      Storage.addPost({ type: 'comment', authorProfile: activeName, authorColor: settings.tagColor, text: `hit the roulette JACKPOT and won ${winnings} tokens! 🎰🎉` });
+    } else if (multiplier > 1) {
+      resultEl.innerHTML = `<span style="color:var(--success);">Nice — ${multiplier}x, +${net} tokens.</span>`;
+    } else if (multiplier === 1) {
+      resultEl.innerHTML = `<span>Push — wager returned.</span>`;
+    } else if (multiplier === 0) {
+      resultEl.innerHTML = `<span style="color:var(--amber);">Bust — lost your ${wager}-token wager.</span>`;
     } else {
-      const winnings = Math.round(wager * multiplier);
-      const net = winnings - wager;
-      Storage.addTokens(net, `Roulette: ${multiplier}x (${net >= 0 ? '+' : ''}${net})`);
-      if (multiplier >= 5) {
-        resultEl.innerHTML = `<span style="color:var(--gold);font-weight:600;">🎉 JACKPOT! 5x — won ${winnings} tokens!</span>`;
-        fireConfetti();
-        playChime('jackpot');
-        const settings = Storage.getSettings();
-        const { name: activeName } = Profiles.getActive();
-        Storage.addPost({ type: 'comment', authorProfile: activeName, authorColor: settings.tagColor, text: `hit the roulette JACKPOT and won ${winnings} tokens! 🎰🎉` });
-      } else if (multiplier > 1) {
-        resultEl.innerHTML = `<span style="color:var(--success);">Nice — ${multiplier}x, +${net} tokens.</span>`;
-      } else if (multiplier === 1) {
-        resultEl.innerHTML = `<span>Push — wager returned.</span>`;
-      } else {
-        resultEl.innerHTML = `<span style="color:var(--amber);">${multiplier}x — lost ${Math.abs(net)} tokens.</span>`;
-      }
+      resultEl.innerHTML = `<span style="color:var(--amber);">${multiplier}x — lost ${Math.abs(net)} tokens.</span>`;
     }
 
     // Update balance/spin count/inputs in place so the result message above stays visible.
@@ -1675,12 +1684,13 @@ function renderPlanTab() {
       row.innerHTML = `
         <div>
           <div class="exercise-name">${ex.name}${ex.standardLift ? ` <span class="pill" style="background:var(--surface-2);color:var(--text-dim);">${ex.standardLift}</span>` : ''}</div>
-          <div class="exercise-meta">${ex.muscle} · ${ex.sets} sets × ${ex.repLow}-${ex.repHigh} reps · starting ${fmtWeight(ex.currentWeight, ex.unit)}</div>
+          <div class="exercise-meta">${ex.muscle}${ex.equipment ? ` · ${ex.equipment}` : ''} · ${ex.sets} sets × ${ex.repLow}-${ex.repHigh} reps · starting ${fmtWeight(ex.currentWeight, ex.unit)}</div>
         </div>
         <div class="row" style="flex:0 0 auto;gap:6px;">
           <button class="btn btn-sm" data-act="up" ${idx === 0 ? 'disabled' : ''}>↑</button>
           <button class="btn btn-sm" data-act="down" ${idx === exercises.length - 1 ? 'disabled' : ''}>↓</button>
           <button class="btn btn-sm" data-act="edit">Edit</button>
+          <button class="btn btn-sm" data-act="replace">Replace</button>
           <button class="btn btn-sm btn-danger" data-act="remove">Remove</button>
         </div>
       `;
@@ -1691,6 +1701,7 @@ function renderPlanTab() {
         renderPlanTab();
       };
       row.querySelector('[data-act="edit"]').onclick = () => renderAddExerciseForm(ex);
+      row.querySelector('[data-act="replace"]').onclick = () => renderAddExerciseForm(ex, true);
       row.querySelector('[data-act="up"]').onclick = () => {
         if (idx === 0) return;
         const arr = plan.days[state.planDay];
@@ -1785,6 +1796,25 @@ function renderPlanBuilderForm() {
   };
 }
 
+// Ensures an exercise object is backed by a library definition — finds a
+// matching one by name or creates a new one, and returns the exercise
+// with exerciseDefId (and identity fields normalized to the definition)
+// attached. Used anywhere exercises get created outside the manual
+// picker flow: the AI plan builder and AI suggestion "add" actions.
+function linkExerciseToLibrary(ex) {
+  const def = Storage.findOrCreateLibraryExercise({
+    name: ex.name, muscle: ex.muscle, equipment: ex.equipment, type: ex.type, lowerBody: ex.lowerBody
+  });
+  return { ...ex, exerciseDefId: def.id, name: def.name, muscle: def.muscle, equipment: def.equipment, type: def.type, lowerBody: def.lowerBody };
+}
+
+function linkPlanToLibrary(plan) {
+  Object.keys(plan.days).forEach(day => {
+    plan.days[day] = (plan.days[day] || []).map(linkExerciseToLibrary);
+  });
+  return plan;
+}
+
 function renderBuilderPreview(container, generatedPlan, unit) {
   const dayCards = DAYS.map(day => {
     const list = generatedPlan.days[day] || [];
@@ -1805,7 +1835,8 @@ function renderBuilderPreview(container, generatedPlan, unit) {
   `;
   $('#applyBuilderPlanBtn').onclick = () => {
     if (!confirm('This replaces every day in your current plan. Continue?')) return;
-    Storage.savePlan(generatedPlan);
+    Storage.savePlan(linkPlanToLibrary(generatedPlan));
+    pushImmediate();
     $('#planBuilderForm').innerHTML = '';
     renderPlanTab();
     toast('New plan applied.');
@@ -1965,7 +1996,8 @@ function applySuggestion(s) {
   const list = plan.days[s.day] || (plan.days[s.day] = []);
   if (s.action === 'add') {
     const settings = Storage.getSettings();
-    list.push({ id: uid(), standardLift: null, unit: settings.units, ...s.newExercise });
+    const linked = linkExerciseToLibrary(s.newExercise);
+    list.push({ id: uid(), standardLift: null, unit: settings.units, ...linked });
     Storage.savePlan(plan);
     return { ok: true };
   }
@@ -1984,82 +2016,198 @@ function applySuggestion(s) {
   return { ok: true };
 }
 
-function renderAddExerciseForm(existing) {
+function renderAddExerciseForm(existing, replaceMode) {
   const settings = Storage.getSettings();
   const container = $('#addExerciseForm');
-  const isEdit = !!existing;
-  container.innerHTML = `
-    <div class="card">
-      <h3>${isEdit ? 'Edit exercise' : 'New exercise'} — ${state.planDay}</h3>
-      <div class="row">
-        <div><label>Exercise name</label><input id="exName" placeholder="e.g. Incline dumbbell press" value="${existing?.name || ''}"></div>
-        <div><label>Muscle</label>
-          <select id="exMuscle">${MUSCLES.map(m => `<option ${existing?.muscle === m ? 'selected' : ''}>${m}</option>`).join('')}</select>
-        </div>
-      </div>
-      <div class="row">
-        <div><label>Type</label>
-          <select id="exType">
-            <option value="compound" ${existing?.type === 'compound' ? 'selected' : ''}>Compound</option>
-            <option value="isolation" ${existing?.type === 'isolation' ? 'selected' : ''}>Isolation</option>
-          </select>
-        </div>
-        <div><label>Lower body?</label>
-          <select id="exLower">
-            <option value="false" ${existing && !existing.lowerBody ? 'selected' : ''}>No</option>
-            <option value="true" ${existing?.lowerBody ? 'selected' : ''}>Yes</option>
-          </select>
-        </div>
-        <div><label>Counts toward tier (optional)</label>
-          <select id="exStandard">
-            <option value="">None</option>
-            ${Standards.allLifts().map(l => `<option ${existing?.standardLift === l ? 'selected' : ''}>${l}</option>`).join('')}
-          </select>
-        </div>
-      </div>
-      <div class="row">
-        <div><label>Sets</label><input id="exSets" type="number" value="${existing?.sets ?? 3}" min="1"></div>
-        <div><label>Rep range low</label><input id="exRepLow" type="number" value="${existing?.repLow ?? 8}" min="1"></div>
-        <div><label>Rep range high</label><input id="exRepHigh" type="number" value="${existing?.repHigh ?? 12}" min="1"></div>
-        <div><label>${isEdit ? 'Current' : 'Starting'} weight (${settings.units})</label><input id="exWeight" type="number" value="${existing?.currentWeight ?? 45}" min="0"></div>
-      </div>
-      <div class="row">
-        <button class="btn btn-primary" id="saveExerciseBtn">${isEdit ? 'Save changes' : 'Save exercise'}</button>
-        <button class="btn" id="cancelExerciseBtn">Cancel</button>
-      </div>
-    </div>
-  `;
-  $('#saveExerciseBtn').onclick = () => {
-    const name = $('#exName').value.trim();
-    if (!name) { toast('Give the exercise a name first.'); return; }
-    const plan = Storage.getPlan();
-    const data = {
-      name,
-      muscle: $('#exMuscle').value,
-      type: $('#exType').value,
-      lowerBody: $('#exLower').value === 'true',
-      standardLift: $('#exStandard').value || null,
-      sets: Number($('#exSets').value) || 3,
-      repLow: Number($('#exRepLow').value) || 8,
-      repHigh: Number($('#exRepHigh').value) || 12,
-      currentWeight: Number($('#exWeight').value) || 45,
-      unit: settings.units
-    };
-    if (isEdit) {
-      const arr = plan.days[state.planDay];
-      const idx = arr.findIndex(e => e.id === existing.id);
-      arr[idx] = { ...existing, ...data };
-    } else {
-      if (!plan.days[state.planDay]) plan.days[state.planDay] = [];
-      plan.days[state.planDay].push({ id: uid(), ...data });
+  const isEdit = !!existing && !replaceMode;
+  const isReplace = !!existing && replaceMode;
+
+  // Local wizard state — not global app state, this form's lifecycle is
+  // short and self-contained.
+  let pickedDef = (isEdit && !isReplace && existing?.exerciseDefId) ? Storage.getLibraryExercise(existing.exerciseDefId) : null;
+  let pickedMuscle = pickedDef?.muscle || null;
+  let creatingNew = false;
+
+  function render() {
+    // Editing day-specific fields on an already-linked exercise skips the
+    // picker entirely — identity is locked unless you hit Replace.
+    if (isEdit && pickedDef) { renderDayFieldsStep(pickedDef, existing); return; }
+    if (isEdit && !pickedDef && !pickedMuscle && existing?.muscle) {
+      // Legacy exercise (or one whose library link no longer exists) —
+      // let editing it also link it in, using its current muscle as a
+      // head start into the picker.
+      pickedMuscle = existing.muscle;
     }
-    Storage.savePlan(plan);
-    container.innerHTML = '';
-    renderPlanTab();
-    toast(isEdit ? 'Exercise updated.' : `Exercise added — it repeats every ${state.planDay} until you change it.`);
-  };
-  $('#cancelExerciseBtn').onclick = () => { container.innerHTML = ''; };
+    if (creatingNew) { renderCreateStep(); return; }
+    if (!pickedMuscle) { renderMuscleStep(); return; }
+    if (!pickedDef) { renderPickStep(); return; }
+    renderDayFieldsStep(pickedDef, existing);
+  }
+
+  function renderMuscleStep() {
+    container.innerHTML = `
+      <div class="card">
+        <h3>${isReplace ? 'Replace exercise' : isEdit ? 'Link this exercise' : 'Add exercise'} — ${state.planDay}</h3>
+        ${isEdit && !isReplace ? `<p class="helper-text">This exercise (${escapeHtml(existing.name)}) isn't linked to your library yet — pick a matching exercise below, or create it, so progress tracks correctly across days.</p>` : ''}
+        <label>What body part are you training?</label>
+        <div class="builder-chip-group" id="muscleChips"></div>
+        <button class="btn btn-sm" id="cancelExerciseBtn" style="margin-top:10px;">Cancel</button>
+      </div>
+    `;
+    const wrap = $('#muscleChips', container);
+    MUSCLES.forEach(m => {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'builder-chip';
+      chip.textContent = m;
+      chip.onclick = () => { pickedMuscle = m; render(); };
+      wrap.appendChild(chip);
+    });
+    $('#cancelExerciseBtn').onclick = () => { container.innerHTML = ''; };
+  }
+
+  function renderPickStep() {
+    const options = Storage.getExerciseLibrary().filter(d => d.muscle === pickedMuscle);
+    container.innerHTML = `
+      <div class="card">
+        <h3>${isReplace ? 'Replace exercise' : 'Add exercise'} — ${pickedMuscle}</h3>
+        ${options.length === 0
+          ? `<p class="helper-text">Nothing in your library for ${pickedMuscle} yet — create the first one.</p>`
+          : `<label>Pick from your library</label><div class="builder-chip-group" id="defChips"></div>`}
+        <button class="btn btn-sm btn-primary" id="createNewDefBtn" style="margin-top:10px;">+ Create new ${pickedMuscle} exercise</button>
+        <button class="btn btn-sm" id="backMuscleBtn" style="margin-top:6px;">← Different body part</button>
+        <button class="btn btn-sm" id="cancelExerciseBtn" style="margin-top:6px;">Cancel</button>
+      </div>
+    `;
+    if (options.length > 0) {
+      const wrap = $('#defChips', container);
+      options.forEach(d => {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'builder-chip';
+        chip.textContent = `${d.name} (${d.equipment})`;
+        chip.onclick = () => { pickedDef = d; render(); };
+        wrap.appendChild(chip);
+      });
+    }
+    $('#createNewDefBtn').onclick = () => { creatingNew = true; render(); };
+    $('#backMuscleBtn').onclick = () => { pickedMuscle = null; render(); };
+    $('#cancelExerciseBtn').onclick = () => { container.innerHTML = ''; };
+  }
+
+  function renderCreateStep() {
+    container.innerHTML = `
+      <div class="card">
+        <h3>New ${pickedMuscle} exercise</h3>
+        <p class="helper-text">This gets added to your exercise library — you'll be able to pick it again on any day, and its progress will always be pooled together.</p>
+        <input id="newDefName" placeholder="Exercise name, e.g. Incline dumbbell press" style="margin-bottom:8px;">
+        <div class="row">
+          <div><label>Equipment</label>
+            <select id="newDefEquipment">${EQUIPMENT_TYPES.map(eq => `<option>${eq}</option>`).join('')}</select>
+          </div>
+          <div><label>Type</label>
+            <select id="newDefType">
+              <option value="compound">Compound</option>
+              <option value="isolation">Isolation</option>
+            </select>
+          </div>
+        </div>
+        <div class="row">
+          <div><label>Lower body?</label>
+            <select id="newDefLower">
+              <option value="false">No</option>
+              <option value="true">Yes</option>
+            </select>
+          </div>
+        </div>
+        <div class="row" style="margin-top:8px;">
+          <button class="btn btn-sm btn-primary" id="saveDefBtn">Create & select</button>
+          <button class="btn btn-sm" id="backPickBtn">← Back</button>
+        </div>
+      </div>
+    `;
+    $('#saveDefBtn').onclick = () => {
+      const name = $('#newDefName', container).value.trim();
+      if (!name) { toast('Give it a name first.'); return; }
+      const def = Storage.addLibraryExercise({
+        name, muscle: pickedMuscle,
+        equipment: $('#newDefEquipment', container).value,
+        type: $('#newDefType', container).value,
+        lowerBody: $('#newDefLower', container).value === 'true'
+      });
+      pushImmediate();
+      pickedDef = def;
+      creatingNew = false;
+      render();
+    };
+    $('#backPickBtn').onclick = () => { creatingNew = false; render(); };
+  }
+
+  function renderDayFieldsStep(def, prior) {
+    container.innerHTML = `
+      <div class="card">
+        <h3>${isEdit && !isReplace ? 'Edit' : isReplace ? 'Replace with' : 'Add'} — ${state.planDay}</h3>
+        <div class="exercise-name">${escapeHtml(def.name)}</div>
+        <div class="exercise-meta">${def.muscle} · ${def.equipment} · ${def.type}${!isEdit || isReplace ? ` — <a href="#" id="changeDefLink">change</a>` : ''}</div>
+        <div class="row" style="margin-top:10px;">
+          <div><label>Sets</label><input id="exSets" type="number" value="${prior?.sets ?? 3}" min="1"></div>
+          <div><label>Rep range low</label><input id="exRepLow" type="number" value="${prior?.repLow ?? 8}" min="1"></div>
+          <div><label>Rep range high</label><input id="exRepHigh" type="number" value="${prior?.repHigh ?? 12}" min="1"></div>
+          <div><label>${prior ? 'Current' : 'Starting'} weight (${settings.units})</label><input id="exWeight" type="number" value="${prior?.currentWeight ?? 45}" min="0"></div>
+        </div>
+        <div class="row">
+          <div><label>Counts toward tier (optional)</label>
+            <select id="exStandard">
+              <option value="">None</option>
+              ${Standards.allLifts().map(l => `<option ${prior?.standardLift === l ? 'selected' : ''}>${l}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+        <div class="row" style="margin-top:8px;">
+          <button class="btn btn-primary" id="saveExerciseBtn">${isEdit && !isReplace ? 'Save changes' : isReplace ? 'Replace' : 'Save exercise'}</button>
+          <button class="btn" id="cancelExerciseBtn">Cancel</button>
+        </div>
+      </div>
+    `;
+    const changeLink = $('#changeDefLink', container);
+    if (changeLink) changeLink.onclick = (e) => { e.preventDefault(); pickedDef = null; pickedMuscle = null; render(); };
+
+    $('#saveExerciseBtn').onclick = () => {
+      const plan = Storage.getPlan();
+      const data = {
+        exerciseDefId: def.id,
+        name: def.name,
+        muscle: def.muscle,
+        equipment: def.equipment,
+        type: def.type,
+        lowerBody: def.lowerBody,
+        standardLift: $('#exStandard', container).value || null,
+        sets: Number($('#exSets', container).value) || 3,
+        repLow: Number($('#exRepLow', container).value) || 8,
+        repHigh: Number($('#exRepHigh', container).value) || 12,
+        currentWeight: Number($('#exWeight', container).value) || 45,
+        unit: settings.units
+      };
+      if (isEdit || isReplace) {
+        const arr = plan.days[state.planDay];
+        const idx = arr.findIndex(e => e.id === existing.id);
+        arr[idx] = { ...existing, ...data };
+      } else {
+        if (!plan.days[state.planDay]) plan.days[state.planDay] = [];
+        plan.days[state.planDay].push({ id: uid(), ...data });
+      }
+      Storage.savePlan(plan);
+      pushImmediate();
+      container.innerHTML = '';
+      renderPlanTab();
+      toast(isEdit ? 'Exercise updated.' : isReplace ? 'Replaced.' : `Exercise added — it repeats every ${state.planDay} until you change it.`);
+    };
+    $('#cancelExerciseBtn').onclick = () => { container.innerHTML = ''; };
+  }
+
+  render();
 }
+
 
 /* ---------------- TODAY TAB ---------------- */
 let todayForceShowForm = false;
@@ -2156,7 +2304,7 @@ function renderTodayTab() {
   });
 
   exercises.forEach(ex => {
-    const exLogs = logsForExerciseName(ex.name, logs, plan);
+    const exLogs = logsForExercise(ex, logs, plan);
     const rx = Progression.nextPrescription(ex, exLogs, upcomingType);
     const plateauMsg = Progression.detectPlateau(exLogs);
     const lastEntry = exLogs[exLogs.length - 1];
@@ -2239,31 +2387,46 @@ function renderTodayTab() {
   });
 
   $('#saveSessionBtn').onclick = () => {
-    const chirp = $('#chirpInput')?.value || '';
-    finalizeSession(templateDay, exercises, logs, (exId) => {
+    const getSets = (exId) => {
       const card = list.querySelector(`.card[data-exercise-id="${exId}"]`);
       return $all('.set-row:not(.set-header)', card).map(row => ({
         weight: readNumberInput(row.querySelector('.set-weight')),
         reps: readNumberInput(row.querySelector('.set-reps')),
         rpe: readNumberInput(row.querySelector('.set-rpe')) || 8
       }));
-    }, chirp);
+    };
+    const incomplete = findIncompleteExercise(exercises, getSets);
+    if (incomplete) { toast(`Fill out "${incomplete}" before saving — every exercise needs at least one set with weight and reps.`); return; }
+    const chirp = $('#chirpInput')?.value || '';
+    finalizeSession(templateDay, exercises, logs, getSets, chirp);
     renderTodayTab();
   };
 }
 
 // Shared by the normal Today-tab save button and Live Workout Mode's finish
 // button — getSetsForExercise(exerciseId) returns that exercise's logged sets.
+// Returns the name of the first exercise that's missing a set entirely,
+// or has a set with no weight/reps recorded — or null if everything's
+// filled out. Shared by the normal Today tab save and Workout Mode finish.
+function findIncompleteExercise(exercises, getSetsForExercise) {
+  for (const ex of exercises) {
+    const sets = getSetsForExercise(ex.id) || [];
+    if (sets.length === 0) return ex.name;
+    if (sets.some(s => !s.weight || !s.reps)) return ex.name;
+  }
+  return null;
+}
+
 function finalizeSession(templateDay, exercises, logs, getSetsForExercise, chirp) {
   const plan = Storage.getPlan();
   const entry = { date: isoDate(), day: templateDay, exercises: [] };
   let prCount = 0;
   exercises.forEach(ex => {
     const sets = getSetsForExercise(ex.id) || [];
-    const priorBest = bestOneRmEverByName(ex.name, logs, plan).oneRm;
+    const priorBest = bestOneRmEver(ex, logs, plan).oneRm;
     const newTop = Progression.topSetOf({ sets });
     if (newTop.oneRm > priorBest && priorBest > 0) prCount++;
-    entry.exercises.push({ exerciseId: ex.id, name: ex.name, muscle: ex.muscle, sets });
+    entry.exercises.push({ exerciseId: ex.id, exerciseDefId: ex.exerciseDefId || null, name: ex.name, muscle: ex.muscle, sets });
   });
   Storage.addLog(entry);
   const { name: activeName } = Profiles.getActive();
@@ -2397,10 +2560,13 @@ function renderWorkoutModeScreen(upcomingType, logs, settings) {
   if (!overlay) return;
   const plan = Storage.getPlan();
   const ex = workoutMode.exercises[workoutMode.idx];
-  const exLogs = logsForExerciseName(ex.name, logs, plan);
+  const exLogs = logsForExercise(ex, logs, plan);
   const rx = Progression.nextPrescription(ex, exLogs, upcomingType);
   const restSecs = Progression.suggestedRestSeconds(ex.repLow, ex.type);
   const isLast = workoutMode.idx === workoutMode.exercises.length - 1;
+
+  const lastEntry = exLogs.length > 0 ? exLogs[exLogs.length - 1] : null;
+  const lastSummary = lastEntry ? (lastEntry.sets || []).map(s => `${fmtWeight(s.weight, ex.unit)}×${s.reps}`).join(', ') : null;
 
   overlay.innerHTML = `
     <div class="wm-header">
@@ -2410,7 +2576,8 @@ function renderWorkoutModeScreen(upcomingType, logs, settings) {
     <div class="wm-body">
       <h2 class="wm-exercise-name">${ex.name}</h2>
       <div class="exercise-meta" style="text-align:center;">${ex.muscle}</div>
-      <div class="rx-box ${upcomingType !== 'train' ? upcomingType : ''}" style="margin:16px auto;max-width:380px;text-align:center;">
+      <div class="wm-last-time">${lastSummary ? `Last time: <strong>${escapeHtml(lastSummary)}</strong>${lastEntry.date ? ` <span class="exercise-meta">(${lastEntry.date})</span>` : ''}` : 'First time logging this exercise — no history yet.'}</div>
+      <div class="rx-box ${upcomingType !== 'train' ? upcomingType : ''}" style="margin:10px auto 16px;max-width:380px;text-align:center;">
         Target: <strong>${rx.sets} × ${rx.reps} @ ${fmtWeight(rx.weight, ex.unit)}</strong><br>
         <span class="exercise-meta">Aiming for ${ex.repLow}-${ex.repHigh} reps per set</span><br>${rx.note}
       </div>
@@ -2452,8 +2619,17 @@ function renderWorkoutModeScreen(upcomingType, logs, settings) {
   const finishBtn = $('#wmFinishBtn');
   if (finishBtn) finishBtn.onclick = () => {
     saveWorkoutModeCurrentSets(ex.id);
+    const getSets = (exId) => workoutMode.setsCache[exId];
+    const incomplete = findIncompleteExercise(workoutMode.exercises, getSets);
+    if (incomplete) {
+      const idx = workoutMode.exercises.findIndex(e => e.name === incomplete);
+      if (idx >= 0) workoutMode.idx = idx;
+      renderWorkoutModeScreen(upcomingType, logs, settings);
+      toast(`Fill out "${incomplete}" before finishing — every exercise needs at least one set with weight and reps.`);
+      return;
+    }
     const chirp = $('#wmChirpInput')?.value || '';
-    finalizeSession(workoutMode.templateDay, workoutMode.exercises, logs, (exId) => workoutMode.setsCache[exId], chirp);
+    finalizeSession(workoutMode.templateDay, workoutMode.exercises, logs, getSets, chirp);
     exitWorkoutMode();
     renderTodayTab();
   };
@@ -2620,7 +2796,7 @@ function countAllTimePRs(logs) {
   sorted.forEach(l => {
     (l.exercises || []).forEach(e => {
       const top = Progression.topSetOf(e);
-      const key = normalizedExerciseName(e.name);
+      const key = e.exerciseDefId || normalizedExerciseName(e.name);
       const prior = bestByExercise[key] || 0;
       if (prior > 0 && top.oneRm > prior) prCount++;
       if (top.oneRm > prior) bestByExercise[key] = top.oneRm;
@@ -2723,14 +2899,14 @@ function renderProgressTab() {
   });
 
   const chosen = exercises.find(e => e.id === state.progressExerciseId);
-  const entries = logsForExerciseName(chosen.name, logs, plan);
+  const entries = logsForExercise(chosen, logs, plan);
   const points = entries.map(e => {
     const top = Progression.topSetOf(e);
     return { x: e.date.slice(5), y: top.oneRm };
   });
   $('#progressChart').innerHTML = `<h3 style="margin-bottom:8px;">${chosen.name} — estimated 1RM trend</h3>` + Charts.line(points, { unitLabel: chosen.unit });
 
-  const best = bestOneRmEverByName(chosen.name, logs, plan);
+  const best = bestOneRmEver(chosen, logs, plan);
   $('#progressPR').textContent = best.oneRm > 0
     ? `Best estimated 1RM: ${best.oneRm}${chosen.unit} (set on ${best.date})`
     : 'Log a session with this exercise to start tracking.';
@@ -3110,5 +3286,21 @@ document.addEventListener('DOMContentLoaded', async () => {
   await syncNow(false);
   migrateThemeSettings();
   applyTheme();
-  if (Storage.hasAnyProfile()) switchTab('home');
+  if (Storage.hasAnyProfile()) { migrateExercisesToLibrary(); switchTab('home'); }
 });
+
+// One-time, per-profile: links any plan exercise created before the
+// exercise library existed into it, so progression/PR pooling is backed
+// by a stable defId for everyone, not just exercises added going forward.
+function migrateExercisesToLibrary() {
+  const plan = Storage.getPlan();
+  let changed = false;
+  Object.keys(plan.days).forEach(day => {
+    plan.days[day] = (plan.days[day] || []).map(ex => {
+      if (ex.exerciseDefId) return ex;
+      changed = true;
+      return linkExerciseToLibrary(ex);
+    });
+  });
+  if (changed) { Storage.savePlan(plan); pushImmediate(); }
+}

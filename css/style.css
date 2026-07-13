@@ -1404,6 +1404,13 @@ textarea {
   text-align: center;
   margin-bottom: 4px;
 }
+.wm-last-time {
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-dim);
+  margin-top: 8px;
+  font-family: var(--font-mono);
+}
 .wm-nav {
   display: flex;
   gap: 10px;

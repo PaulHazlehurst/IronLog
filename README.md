@@ -175,6 +175,56 @@ style, Taylor becomes Dark mode + Taylor style, Pink/Neon/Sunset/Forest/
 Holiday/Winter all become Dark mode + that style) so nothing resets or
 looks different unless you change it yourself.
 
+## Exercise database — the big architectural change
+
+Built a real exercise library, replacing freeform exercise naming:
+
+- **Adding an exercise now goes through the database**: pick a body part →
+  pick from exercises already in your library for that part → or "+
+  Create new" if it's not there yet (name, equipment — Machine/Free
+  Weight/Bodyweight/Cable/Band/Other, type, lower body). Day-specific
+  scheduling (sets, rep range, starting weight) is set after you've
+  picked or created the exercise.
+- **This makes multi-day progression bulletproof**, not just
+  name-matching. Every exercise slot now carries a stable link back to
+  its database entry — Chest Press on Monday/Wednesday/Friday are visibly
+  the same linked exercise, and progression/PRs pool by that link
+  directly rather than by comparing spelled-out names. Your existing plan
+  gets migrated into the library automatically the first time you open
+  the updated app — nothing resets, nothing needs re-entering.
+- **Replace button** — next to Edit/Remove on every Plan tab exercise,
+  opens the same body-part → library picker to swap which exercise
+  occupies that slot, keeping your sets/rep range as they were.
+- **The AI creates and uses database entries too** — the AI Plan Builder
+  and any AI-suggested new exercise now check the library first and
+  either reuse a matching entry or create one, instead of inventing
+  one-off exercises that would sit outside the system.
+
+## Workout Mode: last time + why the weight moved
+
+Top of each exercise now shows **what you did last time** (every set,
+weight × reps) so you can confirm tracking is actually working, right
+above the existing target/rationale box. The "should I move up in
+weight" logic isn't new — `Progression.nextPrescription` already
+implements double progression (increase load once you hit the top of your
+rep range across all sets with room to spare, per standard resistance
+training practice) — it just wasn't prominent. Now it's the first thing
+you see, not something you had to scroll to notice.
+
+## Can't finish a workout with exercises left blank
+
+Both the regular Today tab and Workout Mode now check that every
+exercise has at least one set with a real weight and rep count (ghost-text
+suggestions still count as filled — you don't have to retype them) before
+letting you save. Workout Mode jumps you straight to whichever exercise
+is missing something instead of just complaining generically.
+
+## Roulette: 0x is a real loss again
+
+Removed the respin mechanic from a couple of rounds ago — landing on 0x
+now costs your wager like any other losing spin. Daily spin allowance and
+PR bonus spins are unchanged.
+
 ## Preset questions can now suggest actual changes
 
 The Recovery and Split questions no longer just answer in text — when

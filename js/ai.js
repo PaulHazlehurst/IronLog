@@ -40,6 +40,7 @@ function sanitizeSuggestions(rawSuggestions, allowedActions) {
         base.newExercise = {
           name: String(ex.name).slice(0, 60),
           muscle: ex.muscle,
+          equipment: EQUIPMENT_TYPES.includes(ex.equipment) ? ex.equipment : 'Other',
           type: ex.type === 'isolation' ? 'isolation' : 'compound',
           lowerBody: !!ex.lowerBody,
           sets: Math.max(1, Math.min(8, Number(ex.sets) || 3)),
@@ -127,8 +128,8 @@ Use only these muscle names exactly: ${muscleList}.
 Weight unit: ${units}. Use conservative, sensible starting weights a lifter of unknown current strength could safely handle for each exercise's rep range (it's fine to guess moderate/light).
 
 Respond with ONLY valid JSON, no markdown fences, no commentary, matching exactly this shape:
-{"days":{"Monday":[{"name":"Exercise name","muscle":"Chest","type":"compound","lowerBody":false,"sets":3,"repLow":8,"repHigh":12,"currentWeight":45}],"Tuesday":[],"Wednesday":[],"Thursday":[],"Friday":[],"Saturday":[],"Sunday":[]}}
-"type" must be "compound" or "isolation". "lowerBody" must be true or false. Every one of the 7 day keys must be present, using an empty array for rest days.`;
+{"days":{"Monday":[{"name":"Exercise name","muscle":"Chest","equipment":"Machine","type":"compound","lowerBody":false,"sets":3,"repLow":8,"repHigh":12,"currentWeight":45}],"Tuesday":[],"Wednesday":[],"Thursday":[],"Friday":[],"Saturday":[],"Sunday":[]}}
+"equipment" must be exactly one of: ${EQUIPMENT_TYPES.join(', ')}. "type" must be "compound" or "isolation". "lowerBody" must be true or false. Every one of the 7 day keys must be present, using an empty array for rest days.`;
 
     try {
       const text = await AI.callGemini(prompt);
@@ -144,6 +145,7 @@ Respond with ONLY valid JSON, no markdown fences, no commentary, matching exactl
             id: uid(),
             name: String(ex.name).slice(0, 60),
             muscle: ex.muscle,
+            equipment: EQUIPMENT_TYPES.includes(ex.equipment) ? ex.equipment : 'Other',
             type: ex.type === 'isolation' ? 'isolation' : 'compound',
             lowerBody: !!ex.lowerBody,
             standardLift: null,
@@ -198,8 +200,8 @@ ${planSummary}
 Answer specifically: ${focusText}. Base any suggestion strictly on well-established resistance-training science (recovery windows, specificity, periodization) — don't invent problems if the plan is already reasonable.
 
 Respond with ONLY valid JSON, no markdown fences, no commentary, matching exactly this shape:
-{"answer":"2-4 plain-language sentences answering the question directly, no disclaimers","suggestions":[{"action":"remove","day":"Monday","exerciseName":"Exact existing exercise name","reason":"..."},{"action":"add","day":"Tuesday","newExercise":{"name":"Exercise name","muscle":"Back","type":"compound","lowerBody":false,"sets":3,"repLow":8,"repHigh":12,"currentWeight":45},"reason":"..."},{"action":"move","day":"Thursday","exerciseName":"Exact existing exercise name","toDay":"Friday","reason":"..."},{"action":"swap_days","day":"Tuesday","dayB":"Thursday","reason":"..."}]}
-Valid "action" values: "remove", "add", "move" (relocate one exercise to a different day), "swap_days" (swap two entire days' workouts). "day"/"dayB"/"toDay" must be exactly one of: ${dayList}. "muscle" (for add) must be exactly one of: ${muscleList}. "exerciseName" must exactly match an exercise name that appears in the plan above. At most 3 suggestions, only include ones that would genuinely help — use an empty array if nothing needs to change.`;
+{"answer":"2-4 plain-language sentences answering the question directly, no disclaimers","suggestions":[{"action":"remove","day":"Monday","exerciseName":"Exact existing exercise name","reason":"..."},{"action":"add","day":"Tuesday","newExercise":{"name":"Exercise name","muscle":"Back","equipment":"Machine","type":"compound","lowerBody":false,"sets":3,"repLow":8,"repHigh":12,"currentWeight":45},"reason":"..."},{"action":"move","day":"Thursday","exerciseName":"Exact existing exercise name","toDay":"Friday","reason":"..."},{"action":"swap_days","day":"Tuesday","dayB":"Thursday","reason":"..."}]}
+Valid "action" values: "remove", "add", "move" (relocate one exercise to a different day), "swap_days" (swap two entire days' workouts). "day"/"dayB"/"toDay" must be exactly one of: ${dayList}. "muscle" (for add) must be exactly one of: ${muscleList}. "equipment" (for add) must be exactly one of: ${EQUIPMENT_TYPES.join(", ")}. "exerciseName" must exactly match an exercise name that appears in the plan above. At most 3 suggestions, only include ones that would genuinely help — use an empty array if nothing needs to change.`;
 
     try {
       const text = await AI.callGemini(prompt);
@@ -226,8 +228,8 @@ Here is the plan and a list of automatically-detected flags:
 ${planSummary}
 
 Respond with ONLY valid JSON, no markdown fences, no commentary, matching exactly this shape:
-{"summary":"1-2 plain-language sentences on overall plan quality","suggestions":[{"action":"remove","day":"Monday","exerciseName":"Exact existing exercise name","reason":"One concise sentence naming the principle and why"},{"action":"add","day":"Tuesday","newExercise":{"name":"Exercise name","muscle":"Back","type":"compound","lowerBody":false,"sets":3,"repLow":8,"repHigh":12,"currentWeight":45},"reason":"..."},{"action":"adjust","day":"Wednesday","exerciseName":"Exact existing exercise name","changes":{"sets":4,"repLow":6,"repHigh":10},"reason":"..."},{"action":"move","day":"Thursday","exerciseName":"Exact existing exercise name","toDay":"Friday","reason":"..."},{"action":"swap_days","day":"Tuesday","dayB":"Thursday","reason":"..."}]}
-Valid "action" values: "remove", "add", "adjust", "move" (relocate one exercise to a different day), "swap_days" (swap two entire days' workouts). "day"/"dayB"/"toDay" must be exactly one of: ${dayList}. "muscle" (for add) must be exactly one of: ${muscleList}. "exerciseName" for remove/adjust/move must exactly match an exercise name that appears in the plan above. Only include fields that are changing inside "changes" for adjust. Limit to at most 5 suggestions, prioritized by importance. Use an empty array if you have no changes to suggest.`;
+{"summary":"1-2 plain-language sentences on overall plan quality","suggestions":[{"action":"remove","day":"Monday","exerciseName":"Exact existing exercise name","reason":"One concise sentence naming the principle and why"},{"action":"add","day":"Tuesday","newExercise":{"name":"Exercise name","muscle":"Back","equipment":"Machine","type":"compound","lowerBody":false,"sets":3,"repLow":8,"repHigh":12,"currentWeight":45},"reason":"..."},{"action":"adjust","day":"Wednesday","exerciseName":"Exact existing exercise name","changes":{"sets":4,"repLow":6,"repHigh":10},"reason":"..."},{"action":"move","day":"Thursday","exerciseName":"Exact existing exercise name","toDay":"Friday","reason":"..."},{"action":"swap_days","day":"Tuesday","dayB":"Thursday","reason":"..."}]}
+Valid "action" values: "remove", "add", "adjust", "move" (relocate one exercise to a different day), "swap_days" (swap two entire days' workouts). "day"/"dayB"/"toDay" must be exactly one of: ${dayList}. "muscle" (for add) must be exactly one of: ${muscleList}. "equipment" (for add) must be exactly one of: ${EQUIPMENT_TYPES.join(", ")}. "exerciseName" for remove/adjust/move must exactly match an exercise name that appears in the plan above. Only include fields that are changing inside "changes" for adjust. Limit to at most 5 suggestions, prioritized by importance. Use an empty array if you have no changes to suggest.`;
 
     try {
       const text = await AI.callGemini(prompt);

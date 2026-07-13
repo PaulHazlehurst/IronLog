@@ -113,6 +113,7 @@ function defaultProfile() {
     shop: [],
     spinTokens: 1,
     lastFreeSpinGrantDate: null,
+    exerciseLibrary: [], // [{id, name, muscle, equipment, type, lowerBody, createdAt}]
     wellness: {
       waterLog: {},      // { 'YYYY-MM-DD': true }
       library: [],       // [{id, title, author, totalPages, pagesRead, addedAt}]
@@ -121,6 +122,7 @@ function defaultProfile() {
     }
   };
 }
+const EQUIPMENT_TYPES = ['Machine', 'Free Weight', 'Bodyweight', 'Cable', 'Band', 'Other'];
 function defaultShared() { return { posts: [], specialDate: null, tokensPerWorkout: 12, tokensPerPR: 2, deletedProfiles: [], keepsakes: [] }; }
 function defaultDevice() { return { githubToken: '', githubGistId: '', githubLastSync: null, activeProfile: '', lastSeenPostsAtByProfile: {}, lastNotifiedAtByProfile: {}, aiProvider: 'gemini', aiApiKey: '', aiEnabled: false }; }
 
@@ -509,6 +511,47 @@ const Storage = {
       text: `redeemed "${item.name}" from ${ownerProfileName}'s shop for ${item.cost} tokens 🎁`
     });
     return { ok: true };
+  },
+
+  /* ---------------- EXERCISE LIBRARY ---------------- */
+  // Every exercise slot in the plan links back to one of these definitions
+  // via exerciseDefId. This is what makes progression/PRs reliably connect
+  // across days — no more depending on exact name-spelling matches.
+  getExerciseLibrary() { return Profiles.getActive().data.exerciseLibrary || []; },
+  getLibraryExercise(defId) { return Storage.getExerciseLibrary().find(e => e.id === defId) || null; },
+  findLibraryExerciseByName(name) {
+    const target = (name || '').trim().toLowerCase();
+    return Storage.getExerciseLibrary().find(e => e.name.trim().toLowerCase() === target) || null;
+  },
+  addLibraryExercise({ name, muscle, equipment, type, lowerBody }) {
+    const def = {
+      id: uid(),
+      name: String(name || '').trim().slice(0, 60),
+      muscle,
+      equipment: EQUIPMENT_TYPES.includes(equipment) ? equipment : 'Other',
+      type: type === 'isolation' ? 'isolation' : 'compound',
+      lowerBody: !!lowerBody,
+      createdAt: new Date().toISOString()
+    };
+    Profiles.updateActive(p => {
+      p.exerciseLibrary = [...(p.exerciseLibrary || []), def];
+    });
+    notifyChanged();
+    return def;
+  },
+  // Finds an existing definition by name, or creates one — used by the AI
+  // plan builder and AI suggestions so anything AI-created is also
+  // database-backed rather than a one-off orphaned entry.
+  findOrCreateLibraryExercise({ name, muscle, equipment, type, lowerBody }) {
+    const existing = Storage.findLibraryExerciseByName(name);
+    if (existing) return existing;
+    return Storage.addLibraryExercise({ name, muscle, equipment: equipment || 'Other', type, lowerBody });
+  },
+  removeLibraryExercise(defId) {
+    Profiles.updateActive(p => {
+      p.exerciseLibrary = (p.exerciseLibrary || []).filter(e => e.id !== defId);
+    });
+    notifyChanged();
   },
 
   /* ---------------- WELLNESS ---------------- */
