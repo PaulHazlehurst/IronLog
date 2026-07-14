@@ -2228,6 +2228,8 @@ function captureExerciseSetsToCache(exId, setsWrap) {
     repsPh: row.querySelector('.set-reps').placeholder,
     rpePh: row.querySelector('.set-rpe').placeholder
   }));
+  const { name: activeName } = Profiles.getActive();
+  Storage.saveTodayDraft(activeName, todaySetsCacheDate, todaySetsCache);
 }
 
 function restoreExerciseSetsFromCache(exId, setsWrap, unit) {
@@ -2247,7 +2249,11 @@ function restoreExerciseSetsFromCache(exId, setsWrap, unit) {
 let todayForceShowForm = false;
 function renderTodayTab() {
   const today = isoDate();
-  if (todaySetsCacheDate !== today) { todaySetsCache = {}; todaySetsCacheDate = today; }
+  const { name: activeName } = Profiles.getActive();
+  if (todaySetsCacheDate !== today) {
+    todaySetsCache = Storage.getTodayDraft(activeName, today) || {};
+    todaySetsCacheDate = today;
+  }
   const { templateDay, exercises } = Scheduler.effectiveDayFor(today);
   const cycle = Storage.getCycle();
   const wk = Progression.weekNumberFor(cycle, today);
@@ -2256,7 +2262,6 @@ function renderTodayTab() {
   const settings = Storage.getSettings();
   const plan = Storage.getPlan();
   const panel = $('#panel-today');
-  const { name: activeName } = Profiles.getActive();
 
   const alreadyLoggedToday = logs.some(l => l.date === today);
   if (alreadyLoggedToday && !todayForceShowForm) {
@@ -2441,6 +2446,7 @@ function renderTodayTab() {
     const chirp = $('#chirpInput')?.value || '';
     finalizeSession(templateDay, exercises, logs, getSets, chirp);
     todaySetsCache = {};
+    Storage.clearTodayDraft();
     renderTodayTab();
   };
 }

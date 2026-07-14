@@ -175,6 +175,22 @@ style, Taylor becomes Dark mode + Taylor style, Pink/Neon/Sunset/Forest/
 Holiday/Winter all become Dark mode + that style) so nothing resets or
 looks different unless you change it yourself.
 
+## Fixed: typed numbers gone after an actual app reload
+
+The previous fix (caching typed sets so switching tabs didn't lose them)
+only solved half the problem — that cache lived purely in memory, so it
+was still wiped out by anything that actually reloads the page: closing
+and reopening the app, a browser refresh, a service-worker update. There
+was no durable copy anywhere.
+
+Fixed properly this time: every set you type now also gets written to
+local device storage immediately, not just kept in memory. On reload, the
+Today tab checks for a saved draft matching today's date and your active
+profile, and restores from it automatically. It's device-local only —
+never synced to the shared Gist, since it's just an in-progress draft, not
+real data — and it clears itself the moment you actually save, or when
+the calendar rolls to a new day.
+
 ## Fixed: typed numbers disappearing on the Today tab
 
 Found the actual cause: Workout Mode has always had a cache that saves

@@ -19,6 +19,7 @@ const DB = {
   PROFILES: 'ih_profiles',        // { [name]: { plan, logs, cycle, weekOverrides, settings } }
   SHARED: 'ih_shared',            // { posts, specialDate } — synced, household-wide. NEVER put secrets/API keys in here.
   DEVICE: 'ih_device',            // { githubToken, githubGistId, githubLastSync, activeProfile } — local only
+  TODAY_DRAFT: 'ih_today_draft',  // { profileName, date, cache } — in-progress, unsaved set entries. Local only, never synced — purely so a page reload doesn't lose what you've typed before hitting Save.
   // legacy pre-profile keys, read once for migration then left alone
   LEGACY_PLAN: 'ih_plan', LEGACY_LOGS: 'ih_logs', LEGACY_SETTINGS: 'ih_settings',
   LEGACY_CYCLE: 'ih_cycle', LEGACY_WEEK_OVERRIDES: 'ih_week_overrides'
@@ -460,6 +461,23 @@ const Storage = {
   },
   getTokenLog() { return (Profiles.getActive().data.tokenLog || []).slice().reverse(); },
 
+  /* ---------------- IN-PROGRESS WORKOUT DRAFT ---------------- */
+  // Device-local, never synced — purely so a page reload (closing the app,
+  // browser refresh, a service-worker update) doesn't lose sets you've
+  // typed but haven't saved yet. Scoped to profile + date so it can't leak
+  // between profiles or resurrect a stale draft from a different day.
+  getTodayDraft(profileName, date) {
+    const draft = loadJSON(DB.TODAY_DRAFT, null);
+    if (!draft || draft.profileName !== profileName || draft.date !== date) return null;
+    return draft.cache || null;
+  },
+  saveTodayDraft(profileName, date, cache) {
+    saveJSON(DB.TODAY_DRAFT, { profileName, date, cache });
+  },
+  clearTodayDraft() {
+    try { localStorage.removeItem(DB.TODAY_DRAFT); } catch (e) { /* ignore */ }
+  },
+
   /* ---------------- ROULETTE SPIN TOKENS ---------------- */
   // Grants today's free spin if it hasn't been claimed yet — call this
   // whenever the Shop/Roulette area is opened so it's always current.
@@ -630,7 +648,7 @@ const Storage = {
   },
 
   wipeAll() {
-    [DB.PROFILES, DB.SHARED, DB.DEVICE, DB.LEGACY_PLAN, DB.LEGACY_LOGS, DB.LEGACY_SETTINGS, DB.LEGACY_CYCLE, DB.LEGACY_WEEK_OVERRIDES, LAST_CHANGE_KEY]
+    [DB.PROFILES, DB.SHARED, DB.DEVICE, DB.TODAY_DRAFT, DB.LEGACY_PLAN, DB.LEGACY_LOGS, DB.LEGACY_SETTINGS, DB.LEGACY_CYCLE, DB.LEGACY_WEEK_OVERRIDES, LAST_CHANGE_KEY]
       .forEach(k => localStorage.removeItem(k));
   },
 
