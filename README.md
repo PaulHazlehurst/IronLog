@@ -175,6 +175,31 @@ style, Taylor becomes Dark mode + Taylor style, Pink/Neon/Sunset/Forest/
 Holiday/Winter all become Dark mode + that style) so nothing resets or
 looks different unless you change it yourself.
 
+## Fixed: typed numbers disappearing on the Today tab
+
+Found the actual cause: Workout Mode has always had a cache that saves
+your entered sets as you page between exercises, but the regular
+(non-Workout-Mode) Today tab never got the same treatment — it had *no*
+memory of what you'd typed. Any re-render (switching to another tab and
+back, or anything else that redraws the page) rebuilt every input from
+scratch with nothing but the placeholder suggestion, silently discarding
+whatever you'd actually entered. That's the real bug, and it's now fixed
+the same way Workout Mode already handles it: every keystroke and every
+added/removed set gets captured into a cache immediately, and any
+re-render restores from that cache instead of starting over. It resets
+only when you actually save, or when the calendar date changes.
+
+**Directly answering what you asked:** the numbers you type are what get
+used — that was always true — the bug was that they could vanish before
+you got the chance to save them, not that the app was substituting
+suggestions in their place. Separately, leaving a field genuinely blank
+(never touched) still falls back to the suggested number when you hit
+Save — that's intentional, from an earlier request to not force retyping
+identical numbers. That's a different thing from the bug above, and it's
+unchanged. If you'd rather it *not* do that — require you to actually
+type something before it counts — say so and I'll tighten it; it's a
+one-line change now that the real bug is out of the way.
+
 ## Exercise database — the big architectural change
 
 Built a real exercise library, replacing freeform exercise naming:

@@ -2210,9 +2210,44 @@ function renderAddExerciseForm(existing, replaceMode) {
 
 
 /* ---------------- TODAY TAB ---------------- */
+// Mirrors workoutMode.setsCache but for the regular (non-Workout-Mode)
+// Today tab, which never had this protection — meaning any re-render
+// (switching tabs and back, or anything else) silently discarded
+// anything typed but not yet saved. Keyed by exercise id; reset whenever
+// the calendar date changes.
+let todaySetsCache = {};
+let todaySetsCacheDate = null;
+
+function captureExerciseSetsToCache(exId, setsWrap) {
+  const rows = $all('.set-row:not(.set-header)', setsWrap);
+  todaySetsCache[exId] = rows.map(row => ({
+    weightVal: row.querySelector('.set-weight').value,
+    repsVal: row.querySelector('.set-reps').value,
+    rpeVal: row.querySelector('.set-rpe').value,
+    weightPh: row.querySelector('.set-weight').placeholder,
+    repsPh: row.querySelector('.set-reps').placeholder,
+    rpePh: row.querySelector('.set-rpe').placeholder
+  }));
+}
+
+function restoreExerciseSetsFromCache(exId, setsWrap, unit) {
+  const cached = todaySetsCache[exId];
+  if (!cached || cached.length === 0) return false;
+  resetSetsContainer(setsWrap, unit);
+  cached.forEach(c => {
+    addSetRow(setsWrap, c.weightPh, c.repsPh, unit, c.rpePh);
+    const row = setsWrap.lastElementChild;
+    row.querySelector('.set-weight').value = c.weightVal;
+    row.querySelector('.set-reps').value = c.repsVal;
+    row.querySelector('.set-rpe').value = c.rpeVal;
+  });
+  return true;
+}
+
 let todayForceShowForm = false;
 function renderTodayTab() {
   const today = isoDate();
+  if (todaySetsCacheDate !== today) { todaySetsCache = {}; todaySetsCacheDate = today; }
   const { templateDay, exercises } = Scheduler.effectiveDayFor(today);
   const cycle = Storage.getCycle();
   const wk = Progression.weekNumberFor(cycle, today);
@@ -2345,7 +2380,13 @@ function renderTodayTab() {
     }
 
     const setsWrap = card.querySelector('.sets-log');
-    for (let i = 0; i < rx.sets; i++) addSetRow(setsWrap, rx.weight, rx.reps, ex.unit);
+    const restoredFromCache = restoreExerciseSetsFromCache(ex.id, setsWrap, ex.unit);
+    if (!restoredFromCache) {
+      for (let i = 0; i < rx.sets; i++) addSetRow(setsWrap, rx.weight, rx.reps, ex.unit);
+    }
+    captureExerciseSetsToCache(ex.id, setsWrap); // seed the cache to match what's on screen right away
+    setsWrap.addEventListener('input', () => captureExerciseSetsToCache(ex.id, setsWrap));
+    new MutationObserver(() => captureExerciseSetsToCache(ex.id, setsWrap)).observe(setsWrap, { childList: true });
 
     card.querySelector('.add-set-btn').onclick = () => addSetRow(setsWrap, rx.weight, rx.reps, ex.unit);
 
@@ -2399,6 +2440,7 @@ function renderTodayTab() {
     if (incomplete) { toast(`Fill out "${incomplete}" before saving — every exercise needs at least one set with weight and reps.`); return; }
     const chirp = $('#chirpInput')?.value || '';
     finalizeSession(templateDay, exercises, logs, getSets, chirp);
+    todaySetsCache = {};
     renderTodayTab();
   };
 }
