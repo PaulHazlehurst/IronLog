@@ -175,6 +175,20 @@ style, Taylor becomes Dark mode + Taylor style, Pink/Neon/Sunset/Forest/
 Holiday/Winter all become Dark mode + that style) so nothing resets or
 looks different unless you change it yourself.
 
+## Fixed: blackjack hand disappearing every ~12 seconds
+
+Confirmed — same class of bug as the earlier ones with forms and workout
+logging, and I missed it when I built blackjack in the first place. Two
+things were wrong at once: the Shop tab's render function never checked
+the actual game state, so *any* re-render (background sync or otherwise)
+reset it straight back to the idle "Deal" screen regardless of whether a
+hand was mid-play — and on top of that, background sync wasn't even
+guarded against touching the Shop tab while a hand was active, the way
+it already was for open forms and in-progress workout logs. Fixed both:
+a re-render now restores the actual in-progress (or just-finished) hand
+instead of resetting it, and a silent background sync won't touch the
+Shop tab at all while a hand is active or awaiting "New hand."
+
 ## Vacation mode
 
 "Couldn't make it today" now has a sibling button: 🏖️ Vacation mode. It

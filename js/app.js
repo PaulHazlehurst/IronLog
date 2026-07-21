@@ -564,7 +564,7 @@ function renderBlackjackTable() {
     const newBtn = document.createElement('button');
     newBtn.className = 'btn btn-sm btn-primary';
     newBtn.textContent = 'New hand';
-    newBtn.onclick = () => renderShopTab();
+    newBtn.onclick = () => { blackjack = { deck: [], playerCards: [], dealerCards: [], wager: 0, status: 'idle' }; renderShopTab(); };
     actions.appendChild(newBtn);
   }
 }
@@ -692,8 +692,8 @@ function renderShopTab() {
       <p class="helper-text">Win returns your wager plus a matching profit; a natural blackjack pays 3:2. 2 free hands a day; earn more by hitting a PR.</p>
       <div class="helper-text" id="spinCountDisplay" style="margin-top:2px;">\ud83c\udfb4 ${spins} hand${spins === 1 ? '' : 's'} available</div>
       <div class="row" style="justify-content:center;margin-top:10px;max-width:260px;margin-left:auto;margin-right:auto;">
-        <input id="wagerInput" type="number" min="1" max="${Math.max(1, tokens)}" value="${Math.min(10, Math.max(1, tokens))}" ${tokens < 1 || spins < 1 ? 'disabled' : ''}>
-        <button class="btn btn-primary btn-sm" id="dealBtn" ${tokens < 1 || spins < 1 ? 'disabled' : ''}>Deal</button>
+        <input id="wagerInput" type="number" min="1" max="${Math.max(1, tokens)}" value="${Math.min(10, Math.max(1, tokens))}" ${tokens < 1 || spins < 1 || blackjack.status !== 'idle' ? 'disabled' : ''}>
+        <button class="btn btn-primary btn-sm" id="dealBtn" ${tokens < 1 || spins < 1 || blackjack.status !== 'idle' ? 'disabled' : ''} style="${blackjack.status !== 'idle' ? 'display:none;' : ''}">Deal</button>
       </div>
       ${spins < 1 ? `<p class="helper-text">Out of hands for today \u2014 come back tomorrow, or earn one by hitting a PR.</p>` : ''}
       <div id="blackjackArea" style="display:none;margin-top:14px;"></div>
@@ -706,6 +706,14 @@ function renderShopTab() {
 
   $('#dealBtn').onclick = () => startBlackjackHand();
   renderShopSection($('#shopSection'), activeName);
+
+  // A silent background sync (or just switching tabs and back) would
+  // otherwise reset an in-progress hand to the idle "Deal" screen even
+  // though the game state is still sitting in memory — restore it instead.
+  if (blackjack.status !== 'idle') {
+    $('#blackjackArea').style.display = 'block';
+    renderBlackjackTable();
+  }
 
   const openSendBtn = $('#openSendTokensBtn');
   if (openSendBtn) openSendBtn.onclick = () => {
@@ -2634,6 +2642,13 @@ function isLoggingWorkout() {
     todayForceShowForm;
 }
 
+// A hand in progress (or just finished, showing its result) shouldn't get
+// silently reset by a background sync — same reasoning as protecting an
+// open form or in-progress workout log.
+function isPlayingBlackjack() {
+  return blackjack.status !== 'idle';
+}
+
 async function syncNow(silent) {
   const s = Storage.getSettings();
   if (!s.githubToken) return;
@@ -2655,7 +2670,7 @@ async function syncNow(silent) {
       const activeEl = document.activeElement;
       const isTyping = activeEl && ['INPUT', 'TEXTAREA', 'SELECT'].includes(activeEl.tagName);
       const hasRunningTimer = !!document.querySelector('#restCountdown');
-      if (!silent || !(isTyping || hasRunningTimer || hasOpenTransientForm() || isLoggingWorkout())) renderActiveTab();
+      if (!silent || !(isTyping || hasRunningTimer || hasOpenTransientForm() || isLoggingWorkout() || isPlayingBlackjack())) renderActiveTab();
     }
   }
 }
