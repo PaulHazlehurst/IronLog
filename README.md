@@ -175,6 +175,71 @@ style, Taylor becomes Dark mode + Taylor style, Pink/Neon/Sunset/Forest/
 Holiday/Winter all become Dark mode + that style) so nothing resets or
 looks different unless you change it yourself.
 
+## Vacation mode
+
+"Couldn't make it today" now has a sibling button: 🏖️ Vacation mode. It
+looks at every muscle group scheduled for today, maps each one to a
+sensible bodyweight-only substitute (push-ups for chest, bodyweight
+squats for quads, planks for abs, etc.), and swaps today's session for
+that — no equipment needed, and it still counts as a completed day
+(tokens, streak, PRs where relevant). It's a one-day-only swap — your
+actual plan for that weekday is untouched, and a "Back to normal plan"
+button un-does it if you change your mind before logging.
+
+## Roulette replaced with Blackjack
+
+Simple, real blackjack — dealt hand, Hit/Stand, dealer draws to 17,
+standard rules. Winning returns your wager *plus* a matching profit (not
+just profit with the wager already gone) — a natural blackjack pays 3:2.
+Same economy underneath as before: 2 free hands a day, +1 for every PR.
+No images, no library — cards are just styled divs, so this is genuinely
+lightweight, not a memory concern at all.
+
+## Secret coin button
+
+Tucked at the very bottom of Settings, past the danger zone — a barely-
+visible dot, easy to miss unless you're looking. +10 tokens per tap, no
+limit.
+
+## Home feed pagination
+
+Only the most recent 15 posts render up front now, with a "Load more"
+button underneath for older ones — so the feed's length doesn't keep
+growing page height forever as your history builds up.
+
+## The style question — my honest take, not yet implemented
+
+You explicitly asked me to weigh this before touching anything, so here's
+where I landed — nothing below is built yet.
+
+**Worth doing, low risk:**
+- Unify the timing/easing across the various celebration animations
+  (confetti, kiss stamps, hug pulse, hype burst) and add a smooth
+  transition when switching tabs, instead of the instant cut. Small,
+  safe, makes the whole thing feel more considered.
+- Add proper loading/skeleton states for the AI-driven bits (cue
+  generator, plan review) instead of a blank flash while waiting.
+
+**Worth considering, medium effort:**
+- A spacing/typography consistency pass. This app grew across a lot of
+  features in a lot of sittings — there's likely some drift in padding,
+  font sizes, and card treatment that a dedicated cleanup pass would
+  tighten up, without changing the overall look.
+
+**The big one — only if you actually want a visual identity shift:**
+- Right now a lot of the chrome (tab bar, buttons, stat chips) leans on
+  emoji as icons. That's part of what can read as "quick AI build" rather
+  than "designed product" — but it's also part of what makes this feel
+  warm and personal rather than corporate. Replacing emoji specifically in
+  navigation/chrome with a small, consistent icon set (while keeping emoji
+  in the feed/gifts/casual spots, where it adds real warmth) is the single
+  biggest lever for "looks more intentionally designed" — but it's also
+  the most work and the most subjective. I'd only do this if you're sure
+  you want that trade, not as a default.
+
+Tell me which of these (if any) you want, and I'll build just those —
+didn't want to guess at something this subjective and redo it.
+
 ## Fixed: typed numbers gone after an actual app reload
 
 The previous fix (caching typed sets so switching tabs didn't lose them)

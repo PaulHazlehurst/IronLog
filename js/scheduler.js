@@ -13,6 +13,8 @@ const Scheduler = {
   // Which day's session (by template day-name) actually falls on `dateStr`,
   // after applying this week's override (if any).
   effectiveDayFor(dateStr) {
+    const vacation = Storage.getVacationOverride(dateStr);
+    if (vacation) return { templateDay: 'Vacation mode', exercises: vacation, isVacation: true };
     const plan = Storage.getPlan();
     const overrides = Storage.getWeekOverrides();
     const wkKey = mondayOf(dateStr);

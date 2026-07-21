@@ -12,8 +12,11 @@ let state = {
   shopCardIndex: 0,
   wellnessSection: 'water',
   libraryViewing: null,
-  editingSpecialDate: false
+  editingSpecialDate: false,
+  feedVisibleCount: 15
 };
+
+const FEED_PAGE_SIZE = 15;
 
 function $(sel, root = document) { return root.querySelector(sel); }
 function $all(sel, root = document) { return [...root.querySelectorAll(sel)]; }
@@ -490,31 +493,181 @@ function renderPhotoGalleryHTML(posts) {
     </div>`;
 }
 
-const ROULETTE_SEGMENTS = [0, 0.5, 0, 1, 0, 1.5, 0, 2, 0, 5];
+let blackjack = { deck: [], playerCards: [], dealerCards: [], wager: 0, status: 'idle' };
 
-function buildWheelSVG() {
-  const n = ROULETTE_SEGMENTS.length;
-  const step = 360 / n;
-  const cx = 100, cy = 100, r = 96;
-  const colors = ['var(--accent)', 'var(--surface-2)'];
-  const toXY = (angleDeg, radius) => {
-    const rad = (angleDeg * Math.PI) / 180;
-    return [cx + radius * Math.sin(rad), cy - radius * Math.cos(rad)];
+function freshShuffledDeck() {
+  const ranks = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+  const suits = ['\u2660', '\u2665', '\u2666', '\u2663'];
+  const deck = [];
+  suits.forEach(suit => ranks.forEach(rank => deck.push({ rank, suit })));
+  for (let i = deck.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [deck[i], deck[j]] = [deck[j], deck[i]];
+  }
+  return deck;
+}
+
+function cardValue(rank) {
+  if (rank === 'A') return 11;
+  if (['J', 'Q', 'K'].includes(rank)) return 10;
+  return Number(rank);
+}
+
+function handTotal(cards) {
+  let total = cards.reduce((sum, c) => sum + cardValue(c.rank), 0);
+  let aces = cards.filter(c => c.rank === 'A').length;
+  while (total > 21 && aces > 0) { total -= 10; aces--; }
+  return total;
+}
+
+function isBlackjackHand(cards) { return cards.length === 2 && handTotal(cards) === 21; }
+
+function cardHTML(card, hidden) {
+  if (hidden) return `<div class="bj-card bj-card-back">?</div>`;
+  const isRed = card.suit === '\u2665' || card.suit === '\u2666';
+  return `<div class="bj-card${isRed ? ' bj-card-red' : ''}">${card.rank}${card.suit}</div>`;
+}
+
+function renderBlackjackTable() {
+  const area = $('#blackjackArea');
+  if (!area) return;
+  const playerTotal = handTotal(blackjack.playerCards);
+  const dealerHidden = blackjack.status === 'playing';
+  const dealerTotal = dealerHidden ? cardValue(blackjack.dealerCards[0].rank) : handTotal(blackjack.dealerCards);
+
+  area.innerHTML = `
+    <div class="bj-row">
+      <div class="bj-label">Dealer${dealerHidden ? '' : ` (${dealerTotal})`}</div>
+      <div class="bj-hand">${blackjack.dealerCards.map((c, i) => cardHTML(c, dealerHidden && i === 1)).join('')}</div>
+    </div>
+    <div class="bj-row">
+      <div class="bj-label">You (${playerTotal})</div>
+      <div class="bj-hand">${blackjack.playerCards.map(c => cardHTML(c)).join('')}</div>
+    </div>
+    <div id="bjResult" class="helper-text" style="min-height:20px;text-align:center;margin-top:8px;"></div>
+    <div class="row" style="justify-content:center;margin-top:10px;" id="bjActions"></div>
+  `;
+
+  const actions = $('#bjActions');
+  if (blackjack.status === 'playing') {
+    const hitBtn = document.createElement('button');
+    hitBtn.className = 'btn btn-sm btn-primary';
+    hitBtn.textContent = 'Hit';
+    hitBtn.onclick = () => bjHit();
+    const standBtn = document.createElement('button');
+    standBtn.className = 'btn btn-sm';
+    standBtn.textContent = 'Stand';
+    standBtn.onclick = () => bjStand();
+    actions.appendChild(hitBtn);
+    actions.appendChild(standBtn);
+  } else if (blackjack.status === 'done') {
+    const newBtn = document.createElement('button');
+    newBtn.className = 'btn btn-sm btn-primary';
+    newBtn.textContent = 'New hand';
+    newBtn.onclick = () => renderShopTab();
+    actions.appendChild(newBtn);
+  }
+}
+
+function bjHit() {
+  blackjack.playerCards.push(blackjack.deck.pop());
+  if (handTotal(blackjack.playerCards) > 21) {
+    blackjack.status = 'done';
+    resolveBlackjack('bust');
+  } else {
+    renderBlackjackTable();
+  }
+}
+
+function bjStand() {
+  blackjack.status = 'done';
+  while (handTotal(blackjack.dealerCards) < 17) blackjack.dealerCards.push(blackjack.deck.pop());
+  resolveBlackjack('compare');
+}
+
+function resolveBlackjack(mode) {
+  const wager = blackjack.wager;
+  const playerTotal = handTotal(blackjack.playerCards);
+  const dealerTotal = handTotal(blackjack.dealerCards);
+  const playerBJ = isBlackjackHand(blackjack.playerCards);
+  const dealerBJ = isBlackjackHand(blackjack.dealerCards);
+  let net = 0, message = '', color = 'var(--text)';
+
+  if (mode === 'bust') {
+    net = -wager;
+    message = `Bust at ${playerTotal} \u2014 lost ${wager} tokens.`;
+    color = 'var(--amber)';
+  } else if (playerBJ && dealerBJ) {
+    message = `Both blackjack \u2014 push, wager returned.`;
+  } else if (playerBJ) {
+    net = Math.round(wager * 1.5);
+    message = `Blackjack! \ud83c\udf89 +${net} tokens.`;
+    color = 'var(--gold)';
+    fireConfetti(); playChime('jackpot');
+  } else if (dealerBJ) {
+    net = -wager;
+    message = `Dealer blackjack \u2014 lost ${wager} tokens.`;
+    color = 'var(--amber)';
+  } else if (dealerTotal > 21) {
+    net = wager;
+    message = `Dealer busts at ${dealerTotal} \u2014 you win! +${net} tokens.`;
+    color = 'var(--success)';
+  } else if (playerTotal > dealerTotal) {
+    net = wager;
+    message = `You win, ${playerTotal} to ${dealerTotal} \u2014 +${net} tokens.`;
+    color = 'var(--success)';
+  } else if (playerTotal === dealerTotal) {
+    message = `Push, ${playerTotal} to ${dealerTotal} \u2014 wager returned.`;
+  } else {
+    net = -wager;
+    message = `Dealer wins, ${dealerTotal} to ${playerTotal} \u2014 lost ${wager} tokens.`;
+    color = 'var(--amber)';
+  }
+
+  Storage.addTokens(net, `Blackjack: ${message}`);
+  if (net > 0 && !playerBJ) playChime('pr');
+  renderBlackjackTable();
+  const resultEl = $('#bjResult');
+  if (resultEl) resultEl.innerHTML = `<span style="color:${color};">${message}</span>`;
+
+  const newBalance = Storage.getTokens();
+  const newHands = Storage.getSpinTokens();
+  const balanceNumEl = $('.token-teaser-num', panelShopEl());
+  if (balanceNumEl) balanceNumEl.textContent = newBalance;
+  const handCountEl = $('#spinCountDisplay', panelShopEl());
+  if (handCountEl) handCountEl.textContent = `\ud83c\udfb4 ${newHands} hand${newHands === 1 ? '' : 's'} available`;
+  pushImmediate();
+}
+
+function startBlackjackHand() {
+  const wagerInput = $('#wagerInput');
+  const dealBtn = $('#dealBtn');
+  const wager = Math.floor(Number(wagerInput.value));
+  const balance = Storage.getTokens();
+  if (Storage.getSpinTokens() < 1) { toast('No hands left today.'); return; }
+  if (!wager || wager < 1) { toast('Enter a wager first.'); return; }
+  if (wager > balance) { toast("You don't have that many tokens."); return; }
+
+  Storage.useSpinToken();
+  const deck = freshShuffledDeck();
+  blackjack = {
+    deck,
+    playerCards: [deck.pop(), deck.pop()],
+    dealerCards: [deck.pop(), deck.pop()],
+    wager,
+    status: 'playing'
   };
-  let paths = '';
-  let labels = '';
-  ROULETTE_SEGMENTS.forEach((mult, i) => {
-    const a1 = i * step, a2 = (i + 1) * step;
-    const [x1, y1] = toXY(a1, r);
-    const [x2, y2] = toXY(a2, r);
-    const color = colors[i % 2];
-    paths += `<path d="M${cx},${cy} L${x1.toFixed(2)},${y1.toFixed(2)} A${r},${r} 0 0,1 ${x2.toFixed(2)},${y2.toFixed(2)} Z" fill="${color}" stroke="var(--bg)" stroke-width="1.5"/>`;
-    const [lx, ly] = toXY((a1 + a2) / 2, r * 0.66);
-    const isJackpot = mult === 5;
-    const label = isJackpot ? '5x' : `${mult}x`;
-    labels += `<text x="${lx.toFixed(2)}" y="${ly.toFixed(2)}" font-size="${isJackpot ? 15 : 13}" font-family="var(--font-mono)" fill="${isJackpot ? 'var(--gold)' : 'var(--text)'}" text-anchor="middle" dominant-baseline="middle" font-weight="700">${label}</text>`;
-  });
-  return `<svg viewBox="0 0 200 200" class="roulette-wheel" id="rouletteWheel">${paths}${labels}</svg>`;
+
+  dealBtn.style.display = 'none';
+  wagerInput.disabled = true;
+  $('#blackjackArea').style.display = 'block';
+
+  if (isBlackjackHand(blackjack.playerCards)) {
+    blackjack.status = 'done';
+    resolveBlackjack('compare');
+  } else {
+    renderBlackjackTable();
+  }
 }
 
 function renderShopTab() {
@@ -531,35 +684,27 @@ function renderShopTab() {
       <span class="coin-badge" style="width:44px;height:44px;"></span>
       <div class="token-teaser-num" style="font-size:32px;margin-top:6px;">${tokens}</div>
       <div class="helper-text">+${settings.tokensPerWorkout} per workout, +${settings.tokensPerPR} per PR</div>
-      ${otherNames.length > 0 ? `<button class="btn btn-sm" id="openSendTokensBtn" style="margin-top:8px;">💸 Send tokens</button>` : ''}
+      ${otherNames.length > 0 ? `<button class="btn btn-sm" id="openSendTokensBtn" style="margin-top:8px;">\ud83d\udcb8 Send tokens</button>` : ''}
       <div id="sendTokensForm"></div>
     </div>
     <div class="card" style="text-align:center;">
-      <h3>🎰 Token Roulette</h3>
-      <p class="helper-text">2 free spins a day; earn more by hitting a PR.</p>
-      <div class="helper-text" id="spinCountDisplay" style="margin-top:2px;">🎟️ ${spins} spin${spins === 1 ? '' : 's'} available</div>
-      <div class="roulette-wrap">
-        <div class="roulette-pointer">▼</div>
-        ${buildWheelSVG()}
-        <div class="roulette-hub"></div>
-      </div>
-      <div class="roulette-legend">
-        <span>0x ×5</span><span>0.5x</span><span>1x</span><span>1.5x</span><span>2x</span><span>5x JACKPOT</span>
-      </div>
-      <div class="row" style="justify-content:center;margin-top:14px;max-width:260px;margin-left:auto;margin-right:auto;">
+      <h3>\ud83c\udccf Blackjack</h3>
+      <p class="helper-text">Win returns your wager plus a matching profit; a natural blackjack pays 3:2. 2 free hands a day; earn more by hitting a PR.</p>
+      <div class="helper-text" id="spinCountDisplay" style="margin-top:2px;">\ud83c\udfb4 ${spins} hand${spins === 1 ? '' : 's'} available</div>
+      <div class="row" style="justify-content:center;margin-top:10px;max-width:260px;margin-left:auto;margin-right:auto;">
         <input id="wagerInput" type="number" min="1" max="${Math.max(1, tokens)}" value="${Math.min(10, Math.max(1, tokens))}" ${tokens < 1 || spins < 1 ? 'disabled' : ''}>
-        <button class="btn btn-primary btn-sm" id="spinBtn" ${tokens < 1 || spins < 1 ? 'disabled' : ''}>Spin</button>
+        <button class="btn btn-primary btn-sm" id="dealBtn" ${tokens < 1 || spins < 1 ? 'disabled' : ''}>Deal</button>
       </div>
-      ${spins < 1 ? `<p class="helper-text">Out of spins for today — come back tomorrow, or earn one by hitting a PR.</p>` : ''}
-      <div id="rouletteResult" class="helper-text" style="margin-top:8px;min-height:16px;"></div>
+      ${spins < 1 ? `<p class="helper-text">Out of hands for today \u2014 come back tomorrow, or earn one by hitting a PR.</p>` : ''}
+      <div id="blackjackArea" style="display:none;margin-top:14px;"></div>
     </div>
     <div class="card">
-      <h3>🛍️ Shop</h3>
+      <h3>\ud83d\udecd\ufe0f Shop</h3>
       <div id="shopSection"></div>
     </div>
   `;
 
-  $('#spinBtn').onclick = () => spinRoulette();
+  $('#dealBtn').onclick = () => startBlackjackHand();
   renderShopSection($('#shopSection'), activeName);
 
   const openSendBtn = $('#openSendTokensBtn');
@@ -580,79 +725,12 @@ function renderShopTab() {
       if (amount > Storage.getTokens()) { toast("You don't have that many tokens."); return; }
       if (!confirm(`Send ${amount} tokens to ${target}?`)) return;
       const btn = $('#confirmSendTokensBtn');
-      btn.disabled = true; btn.textContent = 'Sending…';
+      btn.disabled = true; btn.textContent = 'Sending\u2026';
       const res = await Profiles.sendTokensTo(target, amount);
-      toast(res.ok ? `Sent ${amount} tokens to ${target}! 🪙` : res.message);
+      toast(res.ok ? `Sent ${amount} tokens to ${target}! \ud83e\udea9` : res.message);
       renderShopTab();
     };
   };
-}
-
-function spinRoulette() {
-  const wagerInput = $('#wagerInput');
-  const spinBtn = $('#spinBtn');
-  const wager = Math.floor(Number(wagerInput.value));
-  const balance = Storage.getTokens();
-  if (Storage.getSpinTokens() < 1) { toast('No spins left today.'); return; }
-  if (!wager || wager < 1) { toast('Enter a wager first.'); return; }
-  if (wager > balance) { toast("You don't have that many tokens."); return; }
-
-  Storage.useSpinToken();
-  spinBtn.disabled = true;
-  wagerInput.disabled = true;
-  $('#rouletteResult').textContent = '';
-
-  const idx = Math.floor(Math.random() * ROULETTE_SEGMENTS.length);
-  const multiplier = ROULETTE_SEGMENTS[idx];
-  const step = 360 / ROULETTE_SEGMENTS.length;
-  const center = idx * step + step / 2;
-  const spins = 5;
-  const rotation = spins * 360 + (360 - center);
-
-  const wheel = $('#rouletteWheel');
-  wheel.style.transition = 'none';
-  wheel.style.transform = 'rotate(0deg)';
-  void wheel.offsetWidth;
-  wheel.style.transition = 'transform 3.5s cubic-bezier(0.15,0.9,0.25,1)';
-  wheel.style.transform = `rotate(${rotation}deg)`;
-
-  setTimeout(() => {
-    const resultEl = $('#rouletteResult');
-    if (!resultEl) return; // tab may have changed
-
-    const winnings = Math.round(wager * multiplier);
-    const net = winnings - wager;
-    Storage.addTokens(net, `Roulette: ${multiplier}x (${net >= 0 ? '+' : ''}${net})`);
-    if (multiplier >= 5) {
-      resultEl.innerHTML = `<span style="color:var(--gold);font-weight:600;">🎉 JACKPOT! 5x — won ${winnings} tokens!</span>`;
-      fireConfetti();
-      playChime('jackpot');
-      const settings = Storage.getSettings();
-      const { name: activeName } = Profiles.getActive();
-      Storage.addPost({ type: 'comment', authorProfile: activeName, authorColor: settings.tagColor, text: `hit the roulette JACKPOT and won ${winnings} tokens! 🎰🎉` });
-    } else if (multiplier > 1) {
-      resultEl.innerHTML = `<span style="color:var(--success);">Nice — ${multiplier}x, +${net} tokens.</span>`;
-    } else if (multiplier === 1) {
-      resultEl.innerHTML = `<span>Push — wager returned.</span>`;
-    } else if (multiplier === 0) {
-      resultEl.innerHTML = `<span style="color:var(--amber);">Bust — lost your ${wager}-token wager.</span>`;
-    } else {
-      resultEl.innerHTML = `<span style="color:var(--amber);">${multiplier}x — lost ${Math.abs(net)} tokens.</span>`;
-    }
-
-    // Update balance/spin count/inputs in place so the result message above stays visible.
-    const newBalance = Storage.getTokens();
-    const newSpins = Storage.getSpinTokens();
-    const balanceNumEl = $('.token-teaser-num', panelShopEl());
-    if (balanceNumEl) balanceNumEl.textContent = newBalance;
-    const spinCountEl = $('#spinCountDisplay', panelShopEl());
-    if (spinCountEl) spinCountEl.textContent = `🎟️ ${newSpins} spin${newSpins === 1 ? '' : 's'} available`;
-    wagerInput.max = Math.max(1, newBalance);
-    wagerInput.value = Math.min(Number(wagerInput.value) || 10, Math.max(1, newBalance));
-    wagerInput.disabled = newBalance < 1 || newSpins < 1;
-    spinBtn.disabled = newBalance < 1 || newSpins < 1;
-    pushImmediate();
-  }, 3600);
 }
 
 function panelShopEl() { return $('#panel-shop'); }
@@ -1404,7 +1482,17 @@ function renderHomeTab() {
     feed.innerHTML = `<div class="empty-state">No activity yet — post something, or complete a workout to share it here.</div>`;
   } else {
     feed.innerHTML = '';
-    posts.forEach(p => feed.appendChild(renderPostCard(p, activeName)));
+    const visible = posts.slice(0, state.feedVisibleCount);
+    visible.forEach(p => feed.appendChild(renderPostCard(p, activeName)));
+    if (posts.length > visible.length) {
+      const loadMoreBtn = document.createElement('button');
+      loadMoreBtn.className = 'btn btn-sm';
+      loadMoreBtn.style.margin = '4px auto 0';
+      loadMoreBtn.style.display = 'block';
+      loadMoreBtn.textContent = `Load more (${posts.length - visible.length} older)`;
+      loadMoreBtn.onclick = () => { state.feedVisibleCount += FEED_PAGE_SIZE; renderHomeTab(); };
+      feed.appendChild(loadMoreBtn);
+    }
   }
 
   if (unseenGift) {
@@ -2254,7 +2342,7 @@ function renderTodayTab() {
     todaySetsCache = Storage.getTodayDraft(activeName, today) || {};
     todaySetsCacheDate = today;
   }
-  const { templateDay, exercises } = Scheduler.effectiveDayFor(today);
+  const { templateDay, exercises, isVacation } = Scheduler.effectiveDayFor(today);
   const cycle = Storage.getCycle();
   const wk = Progression.weekNumberFor(cycle, today);
   const upcomingType = Progression.weekType(cycle, wk);
@@ -2298,8 +2386,10 @@ function renderTodayTab() {
         <h3 style="margin-bottom:2px;">${new Date().toLocaleDateString(undefined,{weekday:'long', month:'short', day:'numeric'})}</h3>
         <div class="exercise-meta">Scheduled: ${templateDay}${wasReshuffled ? ' (reshuffled this week)' : ''}</div>
       </div>
-      <div class="row" style="flex:0 0 auto;">
-        <button class="btn btn-sm" id="missedBtn">Couldn't make it today</button>
+      <div class="row" style="flex:0 0 auto;flex-wrap:wrap;">
+        ${isVacation
+          ? `<button class="btn btn-sm" id="exitVacationBtn">Back to normal plan</button>`
+          : `<button class="btn btn-sm" id="missedBtn">Couldn't make it today</button><button class="btn btn-sm" id="vacationBtn">🏖️ Vacation mode</button>`}
         ${wasReshuffled ? '<button class="btn btn-sm" id="resetWeekBtn">Undo reshuffle</button>' : ''}
       </div>
     </div>
@@ -2315,11 +2405,25 @@ function renderTodayTab() {
     </div>
   `;
 
-  $('#missedBtn').onclick = () => {
+  $('#missedBtn')?.addEventListener('click', () => {
     const ok = Scheduler.markMissed(today);
     toast(ok ? "Shifted this week's remaining sessions to fit it in." : 'Nothing scheduled today to shift.');
     renderTodayTab();
-  };
+  });
+  $('#vacationBtn')?.addEventListener('click', () => {
+    if (!exercises || exercises.length === 0) { toast('Nothing scheduled today to substitute for.'); return; }
+    const subs = Storage.buildVacationSubstitutes(exercises, settings.units);
+    if (subs.length === 0) { toast("Couldn't find bodyweight substitutes for today's muscle groups."); return; }
+    Storage.setVacationOverride(today, subs);
+    pushImmediate();
+    toast('Bodyweight substitutes ready — no equipment needed today.');
+    renderTodayTab();
+  });
+  $('#exitVacationBtn')?.addEventListener('click', () => {
+    Storage.clearVacationOverride(today);
+    pushImmediate();
+    renderTodayTab();
+  });
   const resetBtn = $('#resetWeekBtn');
   if (resetBtn) resetBtn.onclick = () => { Scheduler.resetWeek(today); renderTodayTab(); };
 
@@ -3133,7 +3237,18 @@ function renderSettingsTab() {
       <h3>Danger zone</h3>
       <button class="btn btn-danger" id="wipeBtn">Erase all profiles &amp; data on this device</button>
     </div>
+    <div style="text-align:center;padding:20px 0;">
+      <span id="secretCoinBtn" class="secret-coin-dot" title=""></span>
+    </div>
   `;
+
+  $('#secretCoinBtn').onclick = () => {
+    Storage.addTokens(10, 'Found a secret');
+    pushImmediate();
+    playChime('pr');
+    fireConfetti();
+    toast('🪙 +10 tokens — you found the secret.');
+  };
 
   const save = (mut) => { const cur = Storage.getSettings(); mut(cur); Storage.saveSettings(cur); toast('Saved.'); };
 

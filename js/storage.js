@@ -108,6 +108,7 @@ function defaultProfile() {
     logs: [],
     cycle: { startDate: isoDate(), deloadEvery: 5, peakEvery: 0 },
     weekOverrides: {},
+    vacationOverrides: {}, // { 'YYYY-MM-DD': [bodyweight substitute exercises] } — a one-day-only swap, plan is untouched
     settings: defaultProfileSettings(),
     tokens: 0,
     tokenLog: [],
@@ -123,6 +124,20 @@ function defaultProfile() {
     }
   };
 }
+// Muscle -> a reasonable bodyweight-only substitute, used by Vacation Mode
+// so a missed-equipment day doesn't have to mean a missed day entirely.
+const BODYWEIGHT_SUBSTITUTES = {
+  Chest: { name: 'Push-ups', repLow: 10, repHigh: 20 },
+  Back: { name: 'Inverted rows (or Superman holds)', repLow: 10, repHigh: 15 },
+  Shoulders: { name: 'Pike push-ups', repLow: 8, repHigh: 15 },
+  Biceps: { name: 'Doorframe/towel curls', repLow: 10, repHigh: 15 },
+  Triceps: { name: 'Diamond push-ups (or bench dips)', repLow: 10, repHigh: 15 },
+  Quads: { name: 'Bodyweight squats', repLow: 15, repHigh: 25 },
+  Hamstrings: { name: 'Single-leg glute bridges', repLow: 12, repHigh: 20 },
+  Glutes: { name: 'Glute bridges', repLow: 15, repHigh: 25 },
+  Calves: { name: 'Standing calf raises', repLow: 15, repHigh: 25 },
+  Abs: { name: 'Plank (hold, seconds) / bicycle crunches', repLow: 12, repHigh: 20 }
+};
 const EQUIPMENT_TYPES = ['Machine', 'Free Weight', 'Bodyweight', 'Cable', 'Band', 'Other'];
 function defaultShared() { return { posts: [], specialDate: null, tokensPerWorkout: 12, tokensPerPR: 2, deletedProfiles: [], keepsakes: [] }; }
 function defaultDevice() { return { githubToken: '', githubGistId: '', githubLastSync: null, activeProfile: '', lastSeenPostsAtByProfile: {}, lastNotifiedAtByProfile: {}, aiProvider: 'gemini', aiApiKey: '', aiEnabled: false }; }
@@ -366,6 +381,35 @@ const Storage = {
 
   getWeekOverrides() { return Profiles.getActive().data.weekOverrides || {}; },
   saveWeekOverrides(o) { Profiles.updateActive(p => p.weekOverrides = o); notifyChanged(); },
+
+  getVacationOverride(date) { return (Profiles.getActive().data.vacationOverrides || {})[date] || null; },
+  setVacationOverride(date, exercises) {
+    Profiles.updateActive(p => {
+      p.vacationOverrides = p.vacationOverrides || {};
+      p.vacationOverrides[date] = exercises;
+    });
+    notifyChanged();
+  },
+  clearVacationOverride(date) {
+    Profiles.updateActive(p => { if (p.vacationOverrides) delete p.vacationOverrides[date]; });
+    notifyChanged();
+  },
+  // Builds one bodyweight substitute per distinct muscle group in the
+  // given exercise list — so a 3-exercise chest day becomes one push-up
+  // block, not three redundant ones.
+  buildVacationSubstitutes(exercises, unit) {
+    const muscles = [...new Set(exercises.map(e => e.muscle))];
+    return muscles
+      .filter(m => BODYWEIGHT_SUBSTITUTES[m])
+      .map(m => {
+        const sub = BODYWEIGHT_SUBSTITUTES[m];
+        return {
+          id: uid(), name: sub.name, muscle: m, type: 'bodyweight', lowerBody: ['Quads', 'Hamstrings', 'Glutes', 'Calves'].includes(m),
+          standardLift: null, sets: 3, repLow: sub.repLow, repHigh: sub.repHigh, currentWeight: 0, unit,
+          exerciseDefId: null
+        };
+      });
+  },
 
   exportAll() {
     const { name, data } = Profiles.getActive();
